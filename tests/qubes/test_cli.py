@@ -1,4 +1,3 @@
-import os
 import subprocess
 import uuid
 import json
@@ -8,16 +7,16 @@ import pytest
 from pathlib import Path
 
 PLUGIN_PATH = Path(__file__).parent / "plugins" / "modules"
-ANSIBLE_CONFIG = os.environ.get(
-    "ANSIBLE_CONFIG", Path(__file__).parent / "ansible.cfg"
-)
 
 
 @pytest.fixture
-def run_playbook(tmp_path):
+def run_playbook(tmp_path, ansible_config):
     """
     Helper to write a playbook and execute it with ansible-playbook.
     """
+
+    ansible_config_path = Path(__file__).parent.parent / f"{ansible_config}.cfg"
+    assert ansible_config_path.is_file()
 
     def _run(playbook_content: List[dict], vms: List[str] = []):
         # Create playbook file
@@ -41,13 +40,16 @@ def run_playbook(tmp_path):
             cwd=tmp_path,
             capture_output=True,
             text=True,
-            env={"ANSIBLE_CONFIG": ANSIBLE_CONFIG},
+            env={"ANSIBLE_CONFIG": str(ansible_config_path)},
         )
         return result
 
     return _run
 
-
+@pytest.mark.parametrize("ansible_config", [
+    "ansible_linear_strategy",
+    "ansible_proxy_strategy"
+])
 def test_create_and_destroy_vm(run_playbook, request):
     name = f"test-vm-{uuid.uuid4().hex[:6]}"
     request.node.mark_vm_created(name)
@@ -86,7 +88,10 @@ def test_create_and_destroy_vm(run_playbook, request):
     # Playbook should run successfully
     assert result.returncode == 0, result.stderr
 
-
+@pytest.mark.parametrize("ansible_config", [
+    "ansible_linear_strategy",
+    "ansible_proxy_strategy"
+])
 def test_properties_and_tags_playbook(run_playbook, request):
     name = f"test-vm-{uuid.uuid4().hex[:6]}"
     request.node.mark_vm_created(name)
@@ -130,6 +135,10 @@ def test_properties_and_tags_playbook(run_playbook, request):
     ), result.stdout
 
 
+@pytest.mark.parametrize("ansible_config", [
+    "ansible_linear_strategy",
+    "ansible_proxy_strategy"
+])
 def test_inventory_playbook(run_playbook, tmp_path, qubes):
     # Generate inventory via playbook
     playbook = [
@@ -160,7 +169,11 @@ def test_inventory_playbook(run_playbook, tmp_path, qubes):
             assert vm.name in content
 
 
-def test_vm_connection(vm, run_playbook):
+@pytest.mark.parametrize("ansible_config", [
+    "ansible_linear_strategy",
+    "ansible_proxy_strategy"
+])
+def test_vm_connection(vm, run_playbook, ansible_config):
     play_attrs = {
         "hosts": vm.name,
         "gather_facts": False,
@@ -255,13 +268,20 @@ def test_vm_connection(vm, run_playbook):
     invalid_user_result = run_playbook(invalid_user_playbook, vms=[vm.name])
     assert invalid_user_result.returncode == 2, invalid_user_result.stdout
 
-    invalid_user_output = json.loads(invalid_user_result.stdout)
-    assert (
-        invalid_user_output["plays"][0]["tasks"][0]["hosts"][vm.name]["msg"]
-        == f'Invalid value "{invalid_user}" for configuration option "plugin_type: connection plugin: qubes setting: remote_user ", valid values are: user, root'
-    ), invalid_user_result.stdout
+    if ansible_config == "ansible_linear_strategy":
+        invalid_user_output = json.loads(invalid_user_result.stdout)
+        assert (
+            invalid_user_output["plays"][0]["tasks"][0]["hosts"][vm.name]["msg"]
+            == f'Invalid value "{invalid_user}" for configuration option "plugin_type: connection plugin: qubes setting: remote_user ", valid values are: user, root'
+        ), invalid_user_result.stdout
+    else:
+        assert f'Invalid value \\"{invalid_user}\\" for configuration option \\"plugin_type: connection plugin: qubes setting: remote_user \\", valid values are: user, root' in invalid_user_result.stdout
 
 
+@pytest.mark.parametrize("ansible_config", [
+    "ansible_linear_strategy",
+    "ansible_proxy_strategy"
+])
 def test_minimalvm_connection(minimalvm, run_playbook):
     play_attrs = {
         "hosts": minimalvm.name,
