@@ -4,27 +4,19 @@ import pytest
 import qubesadmin
 from qubesadmin.utils import vm_dependencies
 
-from ansible_collections.qubesos.core.plugins.modules.qube import QubeModule
-
-DEBIAN_TEMPLATE = "debian-12-minimal"
-
-
-class ModuleExitWithError(Exception):
-    pass
+from plugins.modules.qubesos import core
 
 
 # Helper to run the module core function
 class Module:
     def __init__(self, params):
         self.params = params
-        self.returned_data = None
 
     def fail_json(self, **kwargs):
-        self.returned_data = kwargs
-        raise ModuleExitWithError
+        pytest.fail(f"Module failed: {kwargs}")
 
     def exit_json(self, **kwargs):
-        self.returned_data = kwargs
+        return
 
 
 @pytest.fixture(scope="function")
@@ -46,7 +38,7 @@ def vmname():
 def vm(qubes, request):
     """Generate a VM with default configurations"""
     vmname = f"test-vm-{uuid.uuid4().hex[:8]}"
-    QubeModule(Module({"state": "present", "name": vmname})).run()
+    core(Module({"state": "present", "name": vmname}))
     request.node.mark_vm_created(vmname)
 
     qubes.domains.refresh_cache(force=True)
@@ -56,11 +48,8 @@ def vm(qubes, request):
 @pytest.fixture(scope="function")
 def minimalvm(qubes, request):
     vmname = f"test-minimalvm-{uuid.uuid4().hex[:8]}"
-    QubeModule(
-        Module(
-            {"state": "present", "name": vmname, "template": DEBIAN_TEMPLATE}
-        )
-    ).run()
+    props = {"template": "debian-12-minimal"}
+    core(Module({"state": "present", "name": vmname, "properties": props}))
     request.node.mark_vm_created(vmname)
 
     qubes.domains.refresh_cache(force=True)
@@ -71,9 +60,7 @@ def minimalvm(qubes, request):
 def netvm(qubes, request):
     vmname = f"test-netvm-{uuid.uuid4().hex[:8]}"
     props = {"provides_network": True}
-    QubeModule(
-        Module({"state": "present", "name": vmname, "properties": props})
-    ).run()
+    core(Module({"state": "present", "name": vmname, "properties": props}))
     request.node.mark_vm_created(vmname)
 
     qubes.domains.refresh_cache(force=True)
@@ -83,7 +70,7 @@ def netvm(qubes, request):
 @pytest.fixture(scope="function")
 def audiovm(qubes, request):
     vmname = f"test-audiovm-{uuid.uuid4().hex[:8]}"
-    QubeModule(Module({"state": "present", "name": vmname})).run()
+    core(Module({"state": "present", "name": vmname}))
     request.node.mark_vm_created(vmname)
 
     qubes.domains.refresh_cache(force=True)
@@ -93,7 +80,7 @@ def audiovm(qubes, request):
 @pytest.fixture(scope="function")
 def guivm(qubes, request):
     vmname = f"test-guivm-{uuid.uuid4().hex[:8]}"
-    QubeModule(Module({"state": "present", "name": vmname})).run()
+    core(Module({"state": "present", "name": vmname}))
     request.node.mark_vm_created(vmname)
 
     qubes.domains.refresh_cache(force=True)
@@ -103,15 +90,7 @@ def guivm(qubes, request):
 @pytest.fixture(scope="function")
 def managementdvm(qubes, request):
     vmname = f"test-mdvm-{uuid.uuid4().hex[:8]}"
-    QubeModule(
-        Module(
-            {
-                "state": "present",
-                "name": vmname,
-                "properties": {"template_for_dispvms": True},
-            }
-        )
-    ).run()
+    core(Module({"state": "present", "name": vmname}))
     request.node.mark_vm_created(vmname)
 
     qubes.domains.refresh_cache(force=True)
@@ -140,7 +119,6 @@ def cleanup_vm(qubes, request):
             deps = []
 
         for holder, prop_name in deps:
-            print(f"{holder} => {prop_name}")
             # skip global qubes properties
             if holder is None:
                 continue
@@ -159,7 +137,11 @@ def cleanup_vm(qubes, request):
                 setattr(holder, prop_name, None)
 
         # now remove the VM itself
-        QubeModule(Module({"state": "absent", "name": name})).run()
+        try:
+            core(Module({"command": "remove", "name": name}))
+        except Exception:
+            # if it still fails (e.g. already gone), ignore
+            pass
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@ import os
 import time
 
 from plugins.modules.qubesos import core, VIRT_SUCCESS, VIRT_FAILED
-from tests.qubes.conftest import qubes, vmname, Module
+from tests.qubes.legacy._conftest import qubes, vmname, Module
 
 
 def test_lifecycle_full_create_start_shutdown_remove(qubes, vmname, request):
