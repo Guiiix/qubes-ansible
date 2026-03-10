@@ -25,8 +25,21 @@ from ansible_collections.qubesos.core.plugins.module_utils.qubes_virt import (
 )
 
 
-def main():
+def core(module):
+    helper = QubesHelper(module)
+    module.exit_json(
+        ansible_facts={
+            "pci_net": sorted(helper.find_devices_of_class("02")),
+            "pci_usb": sorted(helper.find_devices_of_class("0c03")),
+            "pci_audio": sorted(
+                list(helper.find_devices_of_class("0401"))
+                + list(helper.find_devices_of_class("0403"))
+            ),
+        }
+    )
 
+
+def main():
     module = AnsibleModule(argument_spec=dict())
 
     try:
@@ -39,17 +52,7 @@ def main():
     if qubesadmin is None:
         module.fail_json("Failed to import the qubesadmin module.")
 
-    helper = QubesHelper(module)
-    return module.exit_json(
-        ansible_facts={
-            "pci_net": sorted(helper.find_devices_of_class("02")),
-            "pci_usb": sorted(helper.find_devices_of_class("0c03")),
-            "pci_audio": sorted(
-                list(helper.find_devices_of_class("0401"))
-                + list(helper.find_devices_of_class("0403"))
-            ),
-        }
-    )
+    core(module)
 
 
 if __name__ == "__main__":

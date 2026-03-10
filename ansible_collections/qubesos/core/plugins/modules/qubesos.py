@@ -21,6 +21,10 @@
 
 from __future__ import absolute_import, division, print_function
 
+from ansible_collections.qubesos.core.plugins.modules.host_devices_facts import (
+    core as module_host_devices_facts,
+)
+
 __metaclass__ = type
 
 ANSIBLE_METADATA = {
@@ -248,6 +252,31 @@ PROPS = {
 }
 
 
+class ModuleExitWithError(Exception):
+    pass
+
+
+# Use the same wrapper class as tests to call new module and catch errors
+class FakeModule:
+    def __init__(self, params):
+        self.params = params
+        self.returned_data = None
+
+    def fail_json(self, **kwargs):
+        self.returned_data = kwargs
+        raise ModuleExitWithError
+
+    def exit_json(self, **kwargs):
+        self.returned_data = kwargs
+
+
+def _run_module_host_devices_facts():
+    ansible_facts = {}
+    fake_module = FakeModule({})
+    module_host_devices_facts(fake_module)
+    return fake_module
+
+
 def create_inventory(result):
     """
     Creates the inventory file dynamically for QubesOS
@@ -315,13 +344,10 @@ def core(module):
 
     # gather device facts
     if module.params.get("gather_device_facts", False):
-        facts = {
-            "pci_net": sorted(v.find_devices_of_class("02")),
-            "pci_usb": sorted(v.find_devices_of_class("0c03")),
-            "pci_audio": sorted(
-                list(v.find_devices_of_class("0401"))
-                + list(v.find_devices_of_class("0403"))
-            ),
+        fake_module = _run_module_host_devices_facts()
+        return VIRT_SUCCESS, {
+            "changed": False,
+            "ansible_facts": fake_module.returned_data["ansible_facts"],
         }
         return VIRT_SUCCESS, {"changed": False, "ansible_facts": facts}
 
