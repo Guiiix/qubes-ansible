@@ -313,74 +313,6 @@ def core(module):
 
     v = QubesVirt(module)
 
-    # Normalize devices into (set_mode, device_specs)
-    if isinstance(devices, dict):
-        set_mode = devices.get("strategy", "strict")
-        device_specs = devices.get("items") or []
-    elif isinstance(devices, list):
-        # flat list -> always strict
-        set_mode = "strict"
-        device_specs = devices
-    elif devices is None:
-        device_specs = []
-    else:
-        module.fail_json(msg=f"Invalid devices parameter: {devices!r}")
-
-    # Now expand each spec into (class, VirtualDevice, per_mode, options)
-    normalized_devices = []
-    for entry in device_specs:
-        if isinstance(entry, str):
-            # simple string spec -> no per-device mode or options
-            cls, vd = v.parse_device(entry)
-            normalized_devices.append((cls, vd, None, []))
-        elif isinstance(entry, dict):
-            # dict spec must have a "device" key
-            device_str = entry.get("device")
-            if not device_str:
-                module.fail_json(
-                    msg=f"Device entry missing 'device': {entry!r}"
-                )
-            cls, vd = v.parse_device(device_str)
-            # optional per-device mode (e.g. "required" or "auto-attach")
-            per_mode = entry.get("mode")
-            # optional options list
-            opts = entry.get("options", {})
-            normalized_devices.append((cls, vd, per_mode, opts))
-        else:
-            module.fail_json(msg=f"Invalid device entry: {entry!r}")
-
-    def apply_devices(vmname):
-        devices_changed = False
-        for device_class in v.get_device_classes():
-            # gather only the entries for this class
-            wants = [
-                (vd, per_mode, opts)
-                for (cls, vd, per_mode, opts) in normalized_devices
-                if cls == device_class
-            ]
-            if set_mode == "strict":
-                devices_changed |= v.sync_devices(vmname, device_class, wants)
-            elif set_mode == "append":
-                current_map = v.list_assigned_devices(vmname, device_class)
-                for vd, per_mode, opts in wants:
-                    spec = f"{device_class}:{vd.backend_domain}:{vd.port_id}:{vd.device_id}"
-                    if spec in current_map:
-                        # already present -> leave it (no mode/options change in append mode)
-                        continue
-                    # new device -> assign with its mode/options
-                    assign_mode = per_mode or (
-                        "required" if device_class == "pci" else "auto-attach"
-                    )
-                    v.assign(
-                        vmname,
-                        device_class,
-                        DeviceAssignment(vd, mode=assign_mode, options=opts),
-                    )
-                    devices_changed = True
-            else:
-                module.fail_json(msg=f"Invalid devices strategy: {set_mode}")
-        return devices_changed
-
     # gather device facts
     if module.params.get("gather_device_facts", False):
         facts = {
@@ -645,6 +577,11 @@ def main():
             notes=dict(type="str", default=None),
             gather_device_facts=dict(type="bool", default=False),
         ),
+    )
+
+    module.deprecate(
+        "Usage of this module is deprecated and support will be dropped in a "
+        "future release. Consider switching to qubes.core.qubes module instead.",
     )
 
     if not qubesadmin:
