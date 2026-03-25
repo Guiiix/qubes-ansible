@@ -605,7 +605,7 @@ def main():
             features=dict(type="dict", default=None),
             notes=dict(type="str", default=None),
             properties=dict(type="dict", default=None),
-            services=dict(type="dict", default=None),
+            services=dict(type="list", default=None),
             shutdown_if_required=dict(type="bool", default=False),
             tags=dict(type="list", default=[]),
             template=dict(type="str", default=None),
