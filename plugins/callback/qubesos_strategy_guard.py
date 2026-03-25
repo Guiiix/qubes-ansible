@@ -1,0 +1,1 @@
+/usr/share/ansible/collections/ansible_collections/qubesos/core/plugins/callback/qubesos_strategy_guard.py

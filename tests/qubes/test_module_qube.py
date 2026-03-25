@@ -2,7 +2,9 @@ import os
 import pytest
 import time
 
-from ansible_collections.qubesos.core.plugins.modules.qube import QubeModule
+from ansible_collections.qubesos.core.plugins.module_utils.qubes_module_qube import (
+    QubeModule,
+)
 from tests.qubes.conftest import qubes, vmname, Module, ModuleExitWithError
 
 
@@ -201,7 +203,7 @@ def test_volumes_list_for_standalonevm(qubes, vmname, request):
             "state": "present",
             "name": vmname,
             "klass": "StandaloneVM",
-            "template": "debian-13-xfce",
+            "clone_src": qubes.default_template,
             "volumes": {
                 "root": {"size": 32212254720},
                 "private": {"size": 10737418240, "revisions_to_keep": 123},

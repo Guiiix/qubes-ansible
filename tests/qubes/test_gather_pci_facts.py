@@ -2,16 +2,18 @@ import os
 import pytest
 import time
 
-from ansible_collections.qubesos.core.plugins.modules.qube import QubeModule
+from ansible_collections.qubesos.core.plugins.module_utils.qubes_module_host_devices_facts import (
+    core,
+)
 from tests.qubes.conftest import qubes, vmname, Module, ModuleExitWithError
 
 
 def test_devices_pci_facts_match_actual(qubes):
     # Gather PCI facts from the module
-    rc, res = core(Module({"gather_device_facts": True}))
-    assert rc == VIRT_SUCCESS, "Fact‐gathering should succeed"
+    fake_module = Module({"gather_device_facts": True})
+    core(fake_module)
 
-    facts = res["ansible_facts"]
+    facts = fake_module.returned_data["ansible_facts"]
     assert "pci_net" in facts
     assert "pci_usb" in facts
     assert "pci_audio" in facts

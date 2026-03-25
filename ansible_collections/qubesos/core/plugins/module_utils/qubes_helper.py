@@ -193,8 +193,47 @@ class QubesHelper(object):
         else:
             network_vm = self.get_vm(netvm)
 
+        print(vmtype, vmname, label, template_vm)
         vm = self.app.add_new_vm(vmtype, vmname, label, template=template_vm)
         vm.netvm = network_vm
+        return 0
+
+    def create_or_clone(
+        self,
+        vmname,
+        vmtype,
+        label="red",
+        template=None,
+        netvm="*default*",
+    ):
+        """Create a new qube of the given type, label, template, and network."""
+        template_vm = template or ""
+        if netvm == "*default*":
+            network_vm = qubesadmin.DEFAULT
+        elif not netvm:
+            network_vm = None
+        else:
+            network_vm = self.get_vm(netvm)
+        if vmtype == "AppVM":
+            if template_vm and self.get_vm(template_vm)._klass == vmtype:
+                vm = self.app.clone_vm(
+                    template_vm, vmname, vmtype, ignore_devices=True
+                )
+            else:
+                vm = self.app.add_new_vm(
+                    vmtype, vmname, label, template=template_vm
+                )
+            vm.netvm = network_vm
+        elif vmtype in ["StandaloneVM", "TemplateVM"] and template_vm:
+            vm = self.app.clone_vm(
+                template_vm, vmname, vmtype, ignore_devices=True
+            )
+            vm.label = label
+        elif vmtype == "DispVM" and template_vm:
+            vm = self.app.add_new_vm(
+                vmtype, vmname, label, template=template_vm
+            )
+            vm.netvm = network_vm
         return 0
 
     def start(self, vmname):

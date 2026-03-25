@@ -4,7 +4,9 @@ import pytest
 import qubesadmin
 from qubesadmin.utils import vm_dependencies
 
-from ansible_collections.qubesos.core.plugins.modules.qube import QubeModule
+from ansible_collections.qubesos.core.plugins.module_utils.qubes_module_qube import (
+    QubeModule,
+)
 
 DEBIAN_TEMPLATE = "debian-12-minimal"
 
@@ -21,7 +23,7 @@ class Module:
 
     def fail_json(self, **kwargs):
         self.returned_data = kwargs
-        raise ModuleExitWithError
+        raise ModuleExitWithError(kwargs)
 
     def exit_json(self, **kwargs):
         self.returned_data = kwargs
