@@ -1,1 +1,1 @@
-/usr/share/ansible/collections/ansible_collections/qubesos/core/plugins/strategy/qubes_proxy.py
+/usr/share/ansible/collections/ansible_collections/qubesos/security/plugins/strategy/qubes_proxy.py

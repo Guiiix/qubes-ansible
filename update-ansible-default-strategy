@@ -19,6 +19,6 @@ except configparser.NoOptionError:
     pass
 
 if current_val != "qubesos.core.qubes_proxy":
-    c.set("defaults", "strategy", "qubesos.core.qubes_proxy")
+    c.set("defaults", "strategy", "qubesos.security.qubes_proxy")
     shutil.copy(CONFIG_FILE, CONFIG_FILE.parent / (CONFIG_FILE.name + ".rpmsave"))
     c.write(CONFIG_FILE.open("w"))

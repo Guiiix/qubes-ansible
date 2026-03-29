@@ -76,8 +76,8 @@ make DESTDIR=$RPM_BUILD_ROOT install-all
 %{_datadir}/ansible/plugins/callback/qubesos_strategy_guard.py
 %{_datadir}/ansible/plugins/strategy/qubes_proxy.py
 /usr/lib/qubes/update-ansible-default-strategy
-%{qubes_collection_dir}/core/plugins/callback/qubesos_strategy_guard.py
-%{qubes_collection_dir}/core/plugins/strategy/qubes_proxy.py
+%{qubes_collection_dir}/security/plugins/callback/qubesos_strategy_guard.py
+%{qubes_collection_dir}/security/plugins/strategy/qubes_proxy.py
 
 %files tests
 %{_datadir}/ansible/tests/qubes/*.py

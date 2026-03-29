@@ -18,10 +18,10 @@ install-common:
 
 install-dom0:
 	mkdir -p $(DESTDIR)/usr/lib/qubes/
-	mkdir -p $(QUBE_COLLECTION_DIR)/core/plugins/callback
-	mkdir -p $(QUBE_COLLECTION_DIR)/core/plugins/strategy
-	install -m 644 ansible_collections/qubesos/core/plugins/callback/qubesos_strategy_guard.py $(QUBE_COLLECTION_DIR)/core/plugins/callback/qubesos_strategy_guard.py
-	install -m 644 ansible_collections/qubesos/core/plugins/strategy/qubes_proxy.py $(QUBE_COLLECTION_DIR)/core/plugins/strategy/qubes_proxy.py
+	mkdir -p $(QUBE_COLLECTION_DIR)/security/plugins/callback
+	mkdir -p $(QUBE_COLLECTION_DIR)/security/plugins/strategy
+	install -m 644 ansible_collections/qubesos/security/plugins/callback/qubesos_strategy_guard.py $(QUBE_COLLECTION_DIR)/security/plugins/callback/qubesos_strategy_guard.py
+	install -m 644 ansible_collections/qubesos/security/plugins/strategy/qubes_proxy.py $(QUBE_COLLECTION_DIR)/security/plugins/strategy/qubes_proxy.py
 	install -m 755 update-ansible-default-strategy $(DESTDIR)/usr/lib/qubes/update-ansible-default-strategy
 
 	mkdir -p $(DESTDIR)/usr/share/ansible/plugins/callback

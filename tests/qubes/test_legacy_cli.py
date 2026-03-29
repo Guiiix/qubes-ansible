@@ -49,7 +49,7 @@ def run_playbook(tmp_path, ansible_config):
 
 @pytest.mark.parametrize(
     "ansible_config",
-    ["ansible_linear_strategy", "ansible_proxy_strategy"],
+    ["ansible_linear_strategy", "ansible_proxy_strategy_legacy"],
 )
 @pytest.mark.parametrize(
     "target_host",
@@ -95,7 +95,8 @@ def test_create_and_destroy_vm(run_playbook, request, target_host):
 
 
 @pytest.mark.parametrize(
-    "ansible_config", ["ansible_linear_strategy", "ansible_proxy_strategy"]
+    "ansible_config",
+    ["ansible_linear_strategy", "ansible_proxy_strategy_legacy"],
 )
 @pytest.mark.parametrize(
     "target_host",
@@ -145,7 +146,8 @@ def test_properties_and_tags_playbook(run_playbook, request, target_host):
 
 
 @pytest.mark.parametrize(
-    "ansible_config", ["ansible_linear_strategy", "ansible_proxy_strategy"]
+    "ansible_config",
+    ["ansible_linear_strategy", "ansible_proxy_strategy_legacy"],
 )
 @pytest.mark.parametrize(
     "target_host",
@@ -182,7 +184,8 @@ def test_inventory_playbook(run_playbook, tmp_path, qubes, target_host):
 
 
 @pytest.mark.parametrize(
-    "ansible_config", ["ansible_linear_strategy", "ansible_proxy_strategy"]
+    "ansible_config",
+    ["ansible_linear_strategy", "ansible_proxy_strategy_legacy"],
 )
 def test_vm_connection(vm, run_playbook, ansible_config):
     play_attrs = {
@@ -293,7 +296,8 @@ def test_vm_connection(vm, run_playbook, ansible_config):
 
 
 @pytest.mark.parametrize(
-    "ansible_config", ["ansible_linear_strategy", "ansible_proxy_strategy"]
+    "ansible_config",
+    ["ansible_linear_strategy", "ansible_proxy_strategy_legacy"],
 )
 def test_minimalvm_connection(minimalvm, run_playbook, ansible_config):
     play_attrs = {
@@ -410,7 +414,8 @@ def test_ansible_doc_qubesos_module():
 
 
 @pytest.mark.parametrize(
-    "ansible_config", ["ansible_linear_strategy", "ansible_proxy_strategy"]
+    "ansible_config",
+    ["ansible_linear_strategy", "ansible_proxy_strategy_legacy"],
 )
 def test_state_absent_when_vm_does_not_exist(run_playbook):
     playbook = [
