@@ -1,8 +1,11 @@
+import sys
 import uuid
 
 import pytest
 import qubesadmin
 from qubesadmin.utils import vm_dependencies
+
+sys.path.append("/usr/share/ansible/collections")
 
 from ansible_collections.qubesos.core.plugins.module_utils.qubes_module_qube import (
     QubeModule,
