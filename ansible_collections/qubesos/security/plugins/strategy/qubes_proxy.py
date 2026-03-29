@@ -44,6 +44,29 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.parsing.yaml.dumper import AnsibleDumper
 
 
+DOCUMENTATION = r"""
+---
+name: qubes
+short_description: Execute Ansible plays inside QubesOS management DispVMs
+description:
+  - This strategy plugin executes Ansible plays on QubesOS VMs by delegating execution
+    to a management DispVM.
+  - For each target host, a dedicated DispVM is created to run the play.
+  - The play, roles, inventory, and variables are packaged and transferred to the DispVM.
+  - Execution is performed using the Qubes RPC C(qubes.AnsibleVM).
+  - Local hosts (C(localhost), C(dom0)) are executed using the default linear strategy.
+  - Remote Qubes VMs are executed in isolation through their management DispVM.
+  - RPC policies required for execution are automatically added and removed.
+
+version_added: "1.0.0"
+
+author:
+  - Guillaume Chinal <guiiix@invisiblethingslab.com>
+
+requirements:
+  - qubesadmin
+"""
+
 display = Display()
 
 RPC_SYS_POLICY_FILES = (

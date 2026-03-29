@@ -30,23 +30,23 @@ DOCUMENTATION = r"""
 ---
 module: qube
 
-short_description: Manage the qubes of a QubesOS system
+short_description: Everything related to the management of your QubesOS qubes.
 
 description:
-    - Creating and deleting qubes.
-    - Control qubes state (running, paused, shutdown...) .
-    - Manage qubes attributes (features, properties, label, notes...)
+    - Create and delete qubes.
+    - Control your qubes state (start, stop, pause...) .
+    - Manage their attributes (features, properties, label, notes, assigned devices...).
 
-version_added: "3.0.0"
+version_added: "1.0.0"
 
 options:
     name:
-        description: The name of the qube you want to manage
+        description: The name of the qube you want to manage.
         required: true
         type: str
 
     state:
-        description: The qubes desired state
+        description: The qubes desired state.
         required: true
         type: str
         choices:
@@ -61,10 +61,10 @@ options:
 
     clone_src:
         description:
-            - Specify the qube to clone.
+            - Create a new qube using the specified qube as source.
             - You can specify different types in O(clone_src) and O(klass).
             - For example, specifying a O(clone_src=my-template-qube) and
-            - O(klass=StandaloneVM) will create a StandaloneVM from a TemplateVM.
+              O(klass=StandaloneVM) will create a StandaloneVM from a TemplateVM.
 
         type: str
 
@@ -87,7 +87,7 @@ options:
             - "       - For other classes defaults to C(auto-attach)."
             - "    - options (dict, optional): extra Qubes device flags to pass when attaching."
             - A list of strings representing the devices to assign to the qube.
-            - Use facts module M("qubesos.core.host_devices_facts") to retrieve the list of available devices.
+            - Use facts module M(qubesos.core.host_devices_facts) to retrieve the list of available devices.
 
     features:
         description:
@@ -102,11 +102,11 @@ options:
 
     properties:
         description:
-            - Manage the qube properties as with `qvm-prefs`.
+            - Manage the qube properties as with the qvm-prefs command.
             - The module doesn't check if the property exists and performs a very simple validation
               for a couple of properties (for example, if you set the V(netvm) property, it will check if
               the VM exists).
-            - With the exception of these few properties, it will let `qubesd` service
+            - With the exception of these few properties, it will let the qubesd service
               handles errors and will fail during execution.
             - As for features, the module expects a dict with properties name as key and their expected value as dict value.
         type: dict
@@ -115,7 +115,7 @@ options:
         description:
             - Enables the provided services on a qube.
             - Provided services names are translated into the feature format
-            - (`service.myservice=1`) and added to the list of expected features.
+            - (service.myservice=1) and added to the list of expected features.
             - If a service is specified both in the O(features) and O(services) options,
             - the value in O(services) is kept.
         type: list
@@ -126,30 +126,31 @@ options:
             - Allow Ansible to shutdown the qube if an operation requires it.
             - This option currently applies only when changing the qube's template.
         type: bool
+        default: false
 
     tags:
         description:
-            - Add the provided tags to the qube
+            - Add the provided tags to the qube.
         type: list
         elements: str
 
     template:
         description:
-            - Set the qube template
+            - Set the qube template.
         type: str
 
     klass:
         description:
             - Set the qube type.
             - Trying to change the type of an existing qube will raise an error.
-            - This option is used when create or cloning a VM.
+            - This option is used when creating or cloning a VM.
         aliases:
             - vmtype
         type: str
 
     volumes:
         description:
-            - Change settings of the qube volumes.
+            - Change the settings of the qube volumes.
             - Volume name must be specified as dict key and volume settings as subelements.
         suboptions:
             size:
@@ -186,7 +187,7 @@ EXAMPLES = r"""
     name: my-app-vm
     state: absent
 
-- name: Ensure my-app-vm is running and has the following attribues
+- name: Ensure my-app-vm is running and has the following attributes
   qubesos.core.qube:
     name: my-app-vm
     klass: AppVM
@@ -225,6 +226,35 @@ EXAMPLES = r"""
     volumes:
         private:
             size: 32212254720
+"""
+
+RETURN = r"""
+changed:
+    description: Indicates if the qube was changed by the module
+    type: bool
+    returned: always
+
+created:
+    description: Indicated if the qube was created by the module
+    type: bool
+    returned: always
+
+deleted:
+    description: Indicated if the qube was created by the module
+    type: bool
+    returned: always
+
+diff:
+    description: Contains the state of changed resource before and after the modification
+    type: dict
+    returned: always
+    contains:
+        before:
+            description: The qube properties before the modification.
+            type: dict
+        after:
+            description: The qube properties after the modification.
+            type: dict
 """
 
 from ansible_collections.qubesos.core.plugins.module_utils.qubes_module_qube import (

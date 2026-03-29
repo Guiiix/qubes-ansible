@@ -6,12 +6,12 @@ DOCUMENTATION = r"""
 ---
 module: command
 
-short_description: Execute something on the host or on the qube
+short_description: Run an action in your qubes or in your dom0.
 
 description:
-    - This module allows to execute command on dom0 or on a qube.
+    - This module runs predefined actions in your dom0 or in your qubes.
     - The actions are not idempotent.
-version_added: "3.0"
+version_added: "1.0.0"
 options:
     name:
         description:
@@ -26,7 +26,7 @@ options:
         choices: [ present, running, shutdown, destroyed, restarted, pause, absent ]
     command:
         description:
-            - Non-idempotent command to execute on the VM.
+            - Non-idempotent command to execute in the VM.
             - "Available commands include:"
             - "C(create): Create a new VM."
             - "C(createinventory): Generate an inventory file for Qubes OS VMs."

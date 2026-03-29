@@ -1,24 +1,44 @@
 # Ansible plugins for QubesOS
 
-This project provides Ansible plugins to interact and manage your [Qubes OS](https://qubes-os.org) virtual machines (called `qubes`).
-Those plugins are under active development, so the syntax and keywords may change in future releases. Contributions and feedback are welcome!
+This project provides Ansible plugins to interact and manage your 
+[Qubes OS](https://qubes-os.org) system.
 
-## Plugins description
+Those plugins are under active development, so the syntax and keywords may 
+change in future releases. Contributions and feedback are welcome!
 
-### ``qubesos`` module
+## Online documentation
 
-This module may be used to interact with the QubesOS API to manage the state 
-of your qubes. You can use it to create, update, remove, restart your qubes as
-well as change their properties.
+The documentation is generated automatically and [is available in the Gitlab
+pages of this project](https://qubesos.gitlab.io/qubes-ansible).
 
-### ``qubes`` connection plugin
+## Collections and plugins
 
-This connection plugin allows Ansible to connect to your qubes using the
-[QubesOS qrexec framework](https://www.qubes-os.org/doc/qrexec/).
+This project provides **QubesOS** Ansible plugins under 2 collections:
+  * `qubesos.core`: Everything related to **QubesOS** management (management 
+modules, the connection plugin...).
+  * `qubesos.security`: Ansible plugins related to **dom0** and **ManagementVM**
+protection while executing management modules.
 
-### ``qubes_proxy`` strategy plugin
 
-This strategy plugin must be used when Ansible is running on dom0 to prevent any
+### Modules
+
+  * `qubesos.core.qube`: Use this module for all tasks related to qubes management (create, destroy, start, set volumes, features, labels...)
+  * `qubesos.core.command`: Non-idempotent commands, used for legacy compatibility, inventory generation...
+  * `host_devices_facts`: Use this module to gather facts about available devices on the host. You likely want
+to use this module to get a list of devices to assign to a VM with the `qubes.core.qube` module.
+
+### ``qubesos.core.qubes`` connection plugin
+
+Given the QubesOS architecture, using SSH to connect to your qubes for management is not relevant.
+Instead, the Ansible connection plugin `qubesos.core.qube` allows to execute all Ansible stuff on
+your target hosts using the [QubesOS qrexec framework](https://www.qubes-os.org/doc/qrexec/).
+
+As you would do with the command `qvm_run`, Ansible will execute modules codes through the RPCs `qubes.VMShell` and 
+`qubes.VMRootShell`.
+
+### ``qubesos.secrurity.qubes_proxy`` strategy plugin
+
+This strategy plugin must be used when Ansible is running on dom0 or ManagementVM to prevent any
 security issue. The plugin acts as a router which will proxify play execution for a 
 given qube into its management disposable VM.
 
@@ -44,7 +64,7 @@ on templates used by your qubes management DVM (``default-mgmt-dvm`` by default)
 
 ## Usage
 
-``qubes`` and ``qubes_proxy`` plugins work out of the box when installed using 
+``qubes.core.qubes`` and ``qubesos.security.qubes_proxy`` plugins work out of the box when installed using 
 RPM. The strategy plugin will read the value of the ``hosts`` field 
 in your playbooks and:
   - run the play locally when ``localhost`` is present in the list (dom0 management / ``qubesos`` module usage)
@@ -60,7 +80,7 @@ strategy=qubes_proxy
 
 You can also put this line in your Play declaration:
 ```
-strategy: qubes_proxy
+strategy: qubesos.security.qubes_proxy
 ```
 
 If extra files need to be present on the disposable VM to execute the playbook, you will need
@@ -87,12 +107,14 @@ ansible
               └── file_to_copy_to_work.txt    
 ```
 
+__Note__: you can use symlink here if multiple roles need the same file. The qubes proxy will dereference
+the symlink before building the archive. 
 
 See the [examples](EXAMPLES.md) for sample playbooks and role tasks demonstrating common usage scenarios.
 
 ## Limitations
 
-The proxy plugin may modify the behaviour of your playbooks. Please notice the following indications and 
+The proxy plugin may modify the behavior of your playbooks. Please notice the following indications and 
 limitations:
 * **Access to facts and variables from other hosts is not possible**: the proxy strategy builds a single
   host vars file containing a merged view of the target's host variables (i.e., variables issued from command line, group vars, host vars, inventory...).
@@ -130,6 +152,48 @@ admin.vm.Create.AppVM        * mgmtvm dom0                   allow
 admin.vm.Create.StandaloneVM * mgmtvm dom0                   allow
 admin.vm.Create.TemplateVM   * mgmtvm dom0                   allow
 admin.vm.Remove              * mgmtvm @tag:created-by-mgmtvm allow target=dom0
+```
+
+## Legacy module `qubesos`
+
+In previous versions of qubes-ansible, a single `qubesos` module were provided 
+which has been split into the following 3 modules to improve reliability and
+maintenance:
+  * `qubesos.core.qube`
+  * `qubesos.core.command`
+  * `qubesos.core.host_devices_facts`
+
+To prevent breaking changes, this module is still present in newer versions of 
+**qubes-ansible** but is considered deprecated and may be removed in a future
+release.
+
+The module takes the same options and will try to translate to calls to the new 
+modules with the appropriate options.
+
+**Note**: to prevent unexpected behaviors in your playbooks, the option `wait`
+has no more effect. The module will always wait for the actions (qube start, stop...)
+to finish before starting a new task.
+
+## Legacy plugins
+
+Plugins from previous **qubes-ansible** versions were deployed in
+`/usr/share/ansible/plugins`. Now these plugins are packaged in an Ansible collection 
+in `/usr/share/ansible/collections/ansible_collections/qubesos`.
+
+If you look into `/usr/share/ansible/plugins`, you will still find symlinks to 
+the new plugins (those in the collections directory) making you able to write
+your playbooks with any of those syntaxes:
+
+```
+- hosts: appvms
+  connection: qubesos.core.qubes
+  strategy: qubesos.security.qubes_proxy
+  ...
+  
+ - hosts: appvms
+   connection: qubes
+   strategy: qubes_proxy
+   ...
 ```
 
 ## License

@@ -1,8 +1,5 @@
 # Example tasks
 
-The **qubesos** module is under active development, and its syntax and available options may evolve.
-Refer to the examples below to learn more about managing Qubes OS qubes.
-
 ## Creating an inventory file for Ansible
 
 To set up an inventory file, create a file with content similar to the following:
@@ -20,13 +17,13 @@ admin-demo
 project-demo
 
 [appvms:vars]
-ansible_connection=qubes
+ansible_connection=qubesos.core.qubes
 
 [templatevms]
 fedora-demo
 
 [templatevms:vars]
-ansible_connection=qubes
+ansible_connection=qubesos.core.qubes
 ```
 
 Once the inventory file is created, you can execute Ansible playbooks using:
@@ -38,7 +35,7 @@ ansible-playbook -i inventory my_playbook.yaml
 To create an inventory file that automatically includes all Qubes, run the following command:
 
 ```bash
-ansible localhost -m qubesos -a 'command=createinventory'
+ansible localhost -m qubesos.core.command -a 'command=createinventory'
 ```
 
 > Warning: This command **overwrites** the existing inventory file in the local directory.
@@ -55,18 +52,20 @@ This is the preferred method to create a new qube if it is not already present.
   connection: local
   tasks:
       - name: Create a test qube
-        qubesos:
-          guest: testqube
-          label: blue
+        qubesos.core.qube:
+          name: testqube
           state: present
           template: "debian-12-xfce"
 ```
 
-> Remark: Only the *guest* parameter is mandatory. By default, the module uses the system default TemplateVM and NetVM, and the default label color is **red**.
+> Remark: Only `name` and `state` parameter are mandatory. By default, 
+> the module uses the system default TemplateVM and NetVM, and the default 
+> label color is **red**.
 
 ## Creating multiple qubes with custom properties and tags
 
-The following example demonstrates creating multiple qubes with specific labels, templates, properties, and a policy file for inter-qube communication.
+The following example demonstrates creating multiple qubes with specific labels,
+templates, properties, and a policy file for inter-qube communication.
 
 ```yaml
 ---
@@ -74,10 +73,10 @@ The following example demonstrates creating multiple qubes with specific labels,
   connection: local
   tasks:
       - name: Create vault-demo with custom properties
-        qubesos:
-          guest: vault-demo
-          label: black
+        qubesos.core.qube:
+          name: vault-demo
           state: present
+          label: black
           template: "fedora-41-xfce"
           properties:
             memory: 600
@@ -85,26 +84,28 @@ The following example demonstrates creating multiple qubes with specific labels,
             netvm: ""
 
       - name: Create work-demo qube using a template
-        qubesos:
-          guest: work-demo
-          label: blue
+        qubesos.core.qube:
+          name: work-demo
           state: present
+          label: blue
           template: "fedora-41-xfce"
 
       - name: Create project-demo qube using a template
-        qubesos:
-          guest: project-demo
-          label: orange
+        qubesos.core.qube:
+          name: project-demo
           state: present
+          label: orange
           template: "fedora-41-xfce"
 
       - name: Create policy file for qube communications
-        copy:
+        ansible.builtin.copy:
           dest: /etc/qubes/policy.d/10-demo.policy
           content: |
             qubes.Gpg * work-demo vault-demo allow
             project.Service1 * work-demo @default allow target=project-demo
           mode: '0755'
+          owner: root
+          group: qubes
 ```
 
 ### Available properties
