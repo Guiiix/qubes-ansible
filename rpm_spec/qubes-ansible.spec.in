@@ -1,3 +1,5 @@
+%define qubes_collection_dir %{_datadir}/ansible/collections/ansible_collections/qubesos
+
 Name:       qubes-ansible
 Version:    @VERSION@
 Release:    @REL@%{?dist}
@@ -66,11 +68,16 @@ make DESTDIR=$RPM_BUILD_ROOT install-all
 %doc README.md LICENSE EXAMPLES.md
 %{_datadir}/ansible/plugins/modules/qubesos.py
 %{_datadir}/ansible/plugins/connection/qubes.py
+%{qubes_collection_dir}/core/plugins/connection/qubes.py
+%{qubes_collection_dir}/core/plugins/module_utils/*.py
+%{qubes_collection_dir}/core/plugins/modules/*.py
 
 %files dom0
 %{_datadir}/ansible/plugins/callback/qubesos_strategy_guard.py
 %{_datadir}/ansible/plugins/strategy/qubes_proxy.py
 /usr/lib/qubes/update-ansible-default-strategy
+%{qubes_collection_dir}/core/plugins/callback/qubesos_strategy_guard.py
+%{qubes_collection_dir}/core/plugins/strategy/qubes_proxy.py
 
 %files tests
 %{_datadir}/ansible/tests/qubes/*.py
