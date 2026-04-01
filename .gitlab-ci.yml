@@ -35,3 +35,20 @@ r4.3:mgmt-host:
     - r4.3:build:vm-fc42
   variables:
     VM_IMAGE: qubes_4.3_64bit_stable.qcow2
+
+pages:
+  stage: build
+  image: python:3
+  tags:
+    - docker
+  artifacts:
+    paths:
+      - public
+  script:
+    - mkdir public
+    - pip3 install sphinx sphinx-ansible-theme antsibull-docs ansible
+    - git submodule update --init --recursive
+    - mkdir build/
+    - antsibull-docs sphinx-init qubesos.* --use-current --dest-dir build/
+    - ANSIBLE_COLLECTIONS_PATH=$(pwd) ./build/build.sh
+    - mv build/build/html/* public/
