@@ -1054,3 +1054,29 @@ def test_properties_invalid_type_for_new_properties(qubes, vmname, request):
         assert "Invalid property value type" in fake_module.returned_data["msg"]
     else:
         pytest.fail("Module should have raised an error")
+
+
+def test_change_properties_should_occur_only_when_necessary(vm):
+    fake_module = Module(
+        {
+            "state": "present",
+            "name": vm.name,
+            "properties": {"ip": 12345},
+        }
+    )
+    QubeModule(fake_module).run()
+
+    assert fake_module.returned_data["diff"]["before"]["properties"]
+    assert fake_module.returned_data["diff"]["after"]["properties"]
+
+    fake_module = Module(
+        {
+            "state": "present",
+            "name": vm.name,
+            "properties": {"ip": 12345},
+        }
+    )
+    QubeModule(fake_module).run()
+
+    assert not fake_module.returned_data["diff"]["before"]
+    assert not fake_module.returned_data["diff"]["after"]

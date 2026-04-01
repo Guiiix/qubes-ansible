@@ -284,24 +284,26 @@ class QubeModule:
 
     def enforce_properties(self):
         self._shutdown_for_template_update()
+        before = {}
+        after = {}
+
         for property_name, property_val in self.wants.properties.items():
             try:
-                self.diff["before"].setdefault("properties", {})
-                self.diff["after"].setdefault("properties", {})
-
                 before_val = getattr(self.qube, property_name)
                 # Useful for VMs
                 if hasattr(before_val, "name"):
                     before_val = before_val.name
-                self.diff["before"]["properties"][property_name] = before_val
 
                 value_to_set = (
                     qubesadmin.DEFAULT
                     if property_val == "*default*"
                     else property_val
                 )
-                self.diff["after"]["properties"][property_name] = property_val
-                setattr(self.qube, property_name, value_to_set)
+
+                if before_val != value_to_set:
+                    setattr(self.qube, property_name, value_to_set)
+                    before[property_name] = before_val
+                    after[property_name] = value_to_set
             except qubesadmin.exc.QubesNoSuchPropertyError:
                 self.module.fail_json(
                     msg=f"Invalid property: '{property_name}'"
@@ -314,6 +316,9 @@ class QubeModule:
                 self.module.fail_json(
                     msg=f"Error while setting property '{property_name}': {e}",
                 )
+        if before or after:
+            self.diff["before"]["properties"] = before
+            self.diff["after"]["properties"] = after
 
     def enforce_state(self):
         current_status = self.qube.get_power_state().lower()
@@ -537,9 +542,9 @@ class QubeModule:
 
     def run(self):
         # Before doing anything, we want to be sure every module parameters
-        # has been set correctly
-        # This is required for present state only because as other states
-        # doesn't enforce qube settings
+        # has been set correctly.
+        # This is not required for absent state because we'll just have to
+        # delete the qube, so we can ignore supplied attributes.
         if self.wants.state != "absent":
             self.validate_module_parameters()
 
