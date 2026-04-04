@@ -303,7 +303,7 @@ class QubeModule:
                 if before_val != value_to_set:
                     setattr(self.qube, property_name, value_to_set)
                     before[property_name] = before_val
-                    after[property_name] = value_to_set
+                    after[property_name] = property_val
             except qubesadmin.exc.QubesNoSuchPropertyError:
                 self.module.fail_json(
                     msg=f"Invalid property: '{property_name}'"
@@ -317,6 +317,7 @@ class QubeModule:
                     msg=f"Error while setting property '{property_name}': {e}",
                 )
         if before or after:
+            self.changed = True
             self.diff["before"]["properties"] = before
             self.diff["after"]["properties"] = after
 
@@ -496,7 +497,7 @@ class QubeModule:
 
             # qubes that must be templates for dispvms
             if property in ["default_dispvm", "management_dispvm"]:
-                if not vm.template_for_dispvms:
+                if not vm.klass == "AppVM" or not vm.template_for_dispvms:
                     self.module.fail_json(
                         msg=f"Cannot set value '{value}' to property '{property}: the qube is not a template for dispvm",
                     )

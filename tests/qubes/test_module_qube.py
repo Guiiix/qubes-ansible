@@ -1056,27 +1056,72 @@ def test_properties_invalid_type_for_new_properties(qubes, vmname, request):
         pytest.fail("Module should have raised an error")
 
 
-def test_change_properties_should_occur_only_when_necessary(vm):
+def test_change_properties_should_occur_only_when_necessary(
+    vm, vmname, request
+):
+    request.node.mark_vm_created(vmname)
+    vm.template_for_dispvms = True
+
+    properties = {
+        "audiovm": "sys-net",
+        "autostart": True,
+        "bootmode": "foo",
+        "debug": True,
+        "default_dispvm": vm.name,
+        "default_user": "root",
+        "kernelopts": "swiotlb=1024",
+        "keyboard_layout": "es+oss+",
+        "label": "blue",
+        "mac": "de:ad:be:ef:ca:fe",
+        "management_dispvm": vm.name,
+        "maxmem": 600,
+        "memory": 500,
+        "netvm": "sys-net",
+        "qrexec_timeout": 180,
+        "shutdown_timeout": 180,
+        "template_for_dispvms": True,
+        "updateable": False,
+        "vcpus": 3,
+    }
+
     fake_module = Module(
         {
             "state": "present",
-            "name": vm.name,
-            "properties": {"ip": 12345},
+            "name": vmname,
+        }
+    )
+    QubeModule(fake_module).run()
+    assert fake_module.returned_data["created"]
+
+    fake_module = Module(
+        {
+            "state": "present",
+            "name": vmname,
+            "properties": properties,
         }
     )
     QubeModule(fake_module).run()
 
+    assert fake_module.returned_data["changed"]
     assert fake_module.returned_data["diff"]["before"]["properties"]
     assert fake_module.returned_data["diff"]["after"]["properties"]
 
     fake_module = Module(
         {
             "state": "present",
-            "name": vm.name,
-            "properties": {"ip": 12345},
+            "name": vmname,
+            "properties": properties,
         }
     )
     QubeModule(fake_module).run()
 
     assert not fake_module.returned_data["diff"]["before"]
     assert not fake_module.returned_data["diff"]["after"]
+
+    fake_module = Module(
+        {
+            "state": "absent",
+            "name": vmname,
+        }
+    )
+    QubeModule(fake_module).run()
