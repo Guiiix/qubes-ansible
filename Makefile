@@ -1,7 +1,7 @@
 VERSION := $(shell cat version)
 QUBE_COLLECTION_DIR := $(DESTDIR)/usr/share/ansible/collections/ansible_collections/qubesos
 
-install-common:
+_install-common:
 	mkdir -p $(QUBE_COLLECTION_DIR)/core/plugins/connection
 	mkdir -p $(QUBE_COLLECTION_DIR)/core/plugins/modules
 	mkdir -p $(QUBE_COLLECTION_DIR)/core/plugins/module_utils
@@ -16,7 +16,13 @@ install-common:
 	install -m 644 plugins/modules/qubesos.py $(DESTDIR)/usr/share/ansible/plugins/modules/qubesos.py
 
 
-install-dom0:
+_install-dom0:
+	mkdir -p $(DESTDIR)/etc/qubes-rpc/
+	install -m 755 qubes-rpc/ansible.CreateManagementPolicies $(DESTDIR)/etc/qubes-rpc/ansible.CreateManagementPolicies
+	install -m 755 qubes-rpc/ansible.RemoveManagementPolicies $(DESTDIR)/etc/qubes-rpc/ansible.RemoveManagementPolicies
+	install -m 755 qubes-rpc/ansible.RemoveManagementPolicies $(DESTDIR)/etc/qubes-rpc/ansible.WaitForCleanup
+
+_install-security:
 	mkdir -p $(DESTDIR)/usr/lib/qubes/
 	mkdir -p $(QUBE_COLLECTION_DIR)/security/plugins/callback
 	mkdir -p $(QUBE_COLLECTION_DIR)/security/plugins/strategy
@@ -29,13 +35,15 @@ install-dom0:
 	cp -P plugins/callback/qubesos_strategy_guard.py $(DESTDIR)/usr/share/ansible/plugins/callback/qubesos_strategy_guard.py
 	cp -P plugins/strategy/qubes_proxy.py $(DESTDIR)/usr/share/ansible/plugins/strategy/qubes_proxy.py
 
-install-tests:
+_install-vm:
+	mkdir -p $(DESTDIR)/etc/qubes-rpc/
+	install -m 755 qubes-rpc/qubes.AnsibleVM $(DESTDIR)/etc/qubes-rpc/qubes.AnsibleVM
+
+_install-tests:
 	mkdir -p $(DESTDIR)/usr/share/ansible/tests/qubes
 	install -m 644 tests/qubes/*.py $(DESTDIR)/usr/share/ansible/tests/qubes/
 	install -m 644 tests/*.cfg $(DESTDIR)/usr/share/ansible/tests/
 
-install-vm:
-	mkdir -p $(DESTDIR)/etc/qubes-rpc/
-	install -m 755 qubes-rpc/qubes.AnsibleVM $(DESTDIR)/etc/qubes-rpc/qubes.AnsibleVM
-
-install-all: install-common install-dom0 install-tests install-vm
+install-vm: _install-common _install-vm
+install-vm-all: install-vm _install-security _install-tests
+install-dom0: _install-common _install-security _install-dom0 _install-tests
