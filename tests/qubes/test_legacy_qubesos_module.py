@@ -1225,3 +1225,81 @@ def test_properties_invalid_type_for_new_properties(qubes, vmname, request):
     )
     assert rc2 == VIRT_FAILED
     assert "Invalid property value type" in res2
+
+
+def test_set_property_to_empty_string(vm, qubes):
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vm.name,
+                "properties": {"netvm": "sys-net"},
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vm.name].netvm == "sys-net"
+
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vm.name,
+                "properties": {"netvm": ""},
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vm.name].netvm == None
+
+
+def test_set_property_to_none(vm, qubes):
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vm.name,
+                "properties": {"netvm": "sys-net"},
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vm.name].netvm == "sys-net"
+
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vm.name,
+                "properties": {"netvm": None},
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vm.name].netvm == None
+
+
+def test_set_property_to_none_str(vm, qubes):
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vm.name,
+                "properties": {"netvm": "sys-net"},
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vm.name].netvm == "sys-net"
+
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vm.name,
+                "properties": {"netvm": "None"},
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vm.name].netvm == None

@@ -492,7 +492,7 @@ class QubeModule:
             "netvm",
         ]:
             value = self.wants.properties.get(property)
-            if value in (None, "dom0", "*default*"):
+            if value in (None, "", "dom0", "*default*", self.qube_name):
                 continue
 
             try:

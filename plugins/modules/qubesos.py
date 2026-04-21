@@ -362,11 +362,17 @@ def _validate_properties(helper, properties, vmtype):
         for key, val in properties.items():
             if key not in PROPS:
                 raise ValidationFailure({"Invalid property": key})
-            if type(val) != PROPS[key]:
+            if val is not None and type(val) != PROPS[key]:
                 raise ValidationFailure({"Invalid property value type": key})
 
             # Make sure that the netvm exists
-            if key == "netvm" and val not in ["*default*", "", "none", "None"]:
+            if key == "netvm" and val not in [
+                "*default*",
+                "",
+                "none",
+                "None",
+                None,
+            ]:
                 try:
                     vm = helper.get_vm(val)
                 except KeyError:
@@ -529,7 +535,10 @@ def core(module):
                     "klass": vmtype,
                     "name": guest,
                     "notes": notes,
-                    "properties": properties,
+                    "properties": {
+                        prop_name: None if prop_val == "None" else prop_val
+                        for prop_name, prop_val in properties.items()
+                    },
                     "services": services,
                     "shutdown_if_required": False,
                     "state": state,

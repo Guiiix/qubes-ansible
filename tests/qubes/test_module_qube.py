@@ -1154,3 +1154,39 @@ def test_change_properties_should_occur_only_when_necessary(
         }
     )
     QubeModule(fake_module).run()
+
+
+def test_set_property_to_empty_string(vm, qubes):
+    fake_module = Module(
+        {
+            "state": "present",
+            "name": vm.name,
+            "properties": {"netvm": "sys-net"},
+        }
+    )
+    QubeModule(fake_module).run()
+    assert qubes.domains[vm.name].netvm == "sys-net"
+
+    fake_module = Module(
+        {"state": "present", "name": vm.name, "properties": {"netvm": ""}}
+    )
+    QubeModule(fake_module).run()
+    assert qubes.domains[vm.name].netvm == None
+
+
+def test_set_property_to_none(vm, qubes):
+    fake_module = Module(
+        {
+            "state": "present",
+            "name": vm.name,
+            "properties": {"netvm": "sys-net"},
+        }
+    )
+    QubeModule(fake_module).run()
+    assert qubes.domains[vm.name].netvm == "sys-net"
+
+    fake_module = Module(
+        {"state": "present", "name": vm.name, "properties": {"netvm": None}}
+    )
+    QubeModule(fake_module).run()
+    assert qubes.domains[vm.name].netvm == None
