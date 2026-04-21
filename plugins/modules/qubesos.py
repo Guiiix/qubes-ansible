@@ -351,7 +351,7 @@ ansible_connection=qubes
         fobj.write(res)
 
 
-def _validate_properties(helper, properties, vmtype):
+def _validate_properties(guest, helper, properties, vmtype):
     # properties will only work with state=present
     # Check properties exist (PROPS)
     # Check netvm exist
@@ -372,6 +372,7 @@ def _validate_properties(helper, properties, vmtype):
                 "none",
                 "None",
                 None,
+                guest,
             ]:
                 try:
                     vm = helper.get_vm(val)
@@ -415,7 +416,7 @@ def _validate_properties(helper, properties, vmtype):
                         )
 
             # Make sure that the default_dispvm exists
-            if key == "default_dispvm":
+            if key == "default_dispvm" and val != guest:
                 try:
                     vm = helper.get_vm(val)
                 except KeyError:
@@ -455,7 +456,7 @@ def core(module):
 
     # Validation
     try:
-        _validate_properties(v, properties, vmtype)
+        _validate_properties(guest, v, properties, vmtype)
     except ValidationFailure as e:
         return VIRT_FAILED, e.reasons
 

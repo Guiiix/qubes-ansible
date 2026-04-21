@@ -1303,3 +1303,19 @@ def test_set_property_to_none_str(vm, qubes):
     )
     assert rc == VIRT_SUCCESS
     assert qubes.domains[vm.name].netvm == None
+
+
+def test_create_vm_which_is_its_self_dispvm(vmname, request, qubes):
+    request.node.mark_vm_created(vmname)
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vmname,
+                "properties": {"default_dispvm": vmname},
+            }
+        )
+    )
+
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vmname].default_dispvm == vmname

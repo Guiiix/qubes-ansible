@@ -1190,3 +1190,17 @@ def test_set_property_to_none(vm, qubes):
     )
     QubeModule(fake_module).run()
     assert qubes.domains[vm.name].netvm == None
+
+
+def test_create_vm_which_is_its_self_dispvm(vmname, request, qubes):
+    request.node.mark_vm_created(vmname)
+
+    fake_module = Module(
+        {
+            "state": "present",
+            "name": vmname,
+            "properties": {"default_dispvm": vmname},
+        }
+    )
+    QubeModule(fake_module).run()
+    assert qubes.domains[vmname].default_dispvm == vmname
