@@ -408,3 +408,50 @@ def test_ansible_doc_qubesos_module():
     assert (
         "> QUBESOS" in result.stdout
     ), "Documentation should mention the module name"
+
+
+@pytest.mark.parametrize(
+    "ansible_config",
+    [
+        "ansible_linear_strategy",
+    ],
+)
+def test_devices_assignment(
+    vm, run_playbook, latest_net_ports, ansible_config, qubes
+):
+    port = latest_net_ports[0]
+
+    default_user_playbook = [
+        {
+            "hosts": vm.name,
+            "gather_facts": False,
+            "tasks": [
+                {
+                    "name": "Assign PCI device",
+                    "qubesos.core.qube": {
+                        "name": vm.name,
+                        "state": "present",
+                        "devices": {
+                            "strategy": "strict",
+                            "items": [port],
+                        },
+                    },
+                },
+            ],
+        },
+    ]
+
+    res = run_playbook(default_user_playbook, vms=[vm.name])
+    assert res.returncode == 0, res.stdout
+
+    qubes.domains.refresh_cache(force=True)
+    assigned = qubes.domains[vm.name].devices["pci"].get_assigned_devices()
+    ports_assigned = [
+        (
+            f"pci:dom0:{d.virtual_device.port_id}"
+            if hasattr(d, "virtual_device")
+            else d.port_id
+        )
+        for d in assigned
+    ]
+    assert ports_assigned == [port]

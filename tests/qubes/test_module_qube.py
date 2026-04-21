@@ -622,6 +622,35 @@ def test_devices_strict_single_pci_assignment(
     assert ports_assigned == [port]
 
 
+def test_devices_explicit_strict_assignment(
+    qubes, vmname, request, latest_net_ports
+):
+    request.node.mark_vm_created(vmname)
+    port = latest_net_ports[-1]
+
+    # Create VM in strict mode with only one PCI device
+    fake_module = Module(
+        {
+            "state": "present",
+            "name": vmname,
+            "devices": {"strategy": "strict", "items": [port]},
+        }
+    )
+    QubeModule(fake_module).run()
+
+    qubes.domains.refresh_cache(force=True)
+    assigned = qubes.domains[vmname].devices["pci"].get_assigned_devices()
+    ports_assigned = [
+        (
+            f"pci:dom0:{d.virtual_device.port_id}"
+            if hasattr(d, "virtual_device")
+            else d.port_id
+        )
+        for d in assigned
+    ]
+    assert ports_assigned == [port]
+
+
 def test_devices_strict_multiple_with_block(
     qubes, vmname, request, latest_net_ports, block_device
 ):

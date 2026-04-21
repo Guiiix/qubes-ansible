@@ -33,7 +33,7 @@ from qubesadmin.vm import QubesVM
 try:
     import qubesadmin
     import qubesadmin.exc
-    from qubesadmin.device_protocol import DeviceAssignment
+    from qubesadmin.device_protocol import DeviceAssignment, AssignmentMode
 except ImportError:
     qubesadmin = None
 
@@ -183,11 +183,25 @@ class QubeModule:
         }
 
     def enforce_devices(self):
+        def compute_devices_list():
+            return {
+                str(dev_type): {
+                    str(dev): (
+                        str(dev_conf[0].value)
+                        if isinstance(dev_conf[0], AssignmentMode)
+                        else str(dev_conf[0])
+                    )
+                    for dev, dev_conf in dev_list.items()
+                }
+                for dev_type, dev_list in self._list_all_assigned_devices().items()
+            }
+
         if self.wants.devices is None:
             return
 
         changed = False
-        before_devices = self._list_all_assigned_devices()
+        before_devices = compute_devices_list()
+
         for device_class in self.helper.get_device_classes():
             # gather only the entries for this class
             wants = [
@@ -206,7 +220,7 @@ class QubeModule:
         if changed:
             self.changed = True
             self.diff["before"]["devices"] = before_devices
-            self.diff["after"]["devices"] = self._list_all_assigned_devices()
+            self.diff["after"]["devices"] = compute_devices_list()
 
     def enforce_existence(self):
         """Creates or remove the qube"""
@@ -426,7 +440,7 @@ class QubeModule:
             unexpected_keys = set(self.wants.devices) - {"strategy", "items"}
             if unexpected_keys:
                 self.module.fail_json(
-                    f"Unexpected keys in 'devices' parameter: {unexpected_keys}"
+                    msg=f"Unexpected keys in 'devices' parameter: {unexpected_keys}"
                 )
             device_specs = self.wants.devices.get("items", [])
             self.devices_set_mode = self.wants.devices.get("strategy", "strict")
