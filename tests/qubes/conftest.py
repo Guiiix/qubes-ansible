@@ -1,3 +1,4 @@
+import subprocess
 import sys
 import uuid
 
@@ -10,8 +11,12 @@ sys.path.append("/usr/share/ansible/collections")
 from ansible_collections.qubesos.core.plugins.module_utils.qubes_module_qube import (
     QubeModule,
 )
+from pathlib import Path
+from typing import List
+
 
 DEBIAN_TEMPLATE = "debian-12-minimal"
+PLUGIN_PATH = Path(__file__).parent / "plugins" / "modules"
 
 
 class ModuleExitWithError(Exception):
@@ -184,3 +189,41 @@ def block_device():
     # Assume the block device under test is always present
     # See fepitre/qubes-g2g-continuous-integration
     return "block:dom0:vdb"
+
+
+@pytest.fixture
+def run_playbook(tmp_path, ansible_config):
+    """
+    Helper to write a playbook and execute it with ansible-playbook.
+    """
+
+    ansible_config_path = Path(__file__).parent.parent / f"{ansible_config}.cfg"
+    assert ansible_config_path.is_file()
+
+    def _run(playbook_content: List[dict], vms: List[str] = []):
+        # Create playbook file
+        pb_file = tmp_path / "playbook.yml"
+        import yaml
+
+        pb_file.write_text(yaml.dump(playbook_content))
+        # Run ansible-playbook
+        cmd = [
+            "ansible-playbook",
+            "-i",
+            f"localhost,dom0,{','.join(vms)}",
+            "-c",
+            "local",
+            "-M",
+            str(PLUGIN_PATH),
+            str(pb_file),
+        ]
+        result = subprocess.run(
+            cmd,
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            env={"ANSIBLE_CONFIG": str(ansible_config_path)},
+        )
+        return result
+
+    return _run
