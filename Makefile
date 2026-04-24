@@ -1,18 +1,33 @@
 VERSION := $(shell cat version)
+QUBE_COLLECTION_DIR := $(DESTDIR)/usr/share/ansible/collections/ansible_collections/qubesos
 
 install-common:
+	mkdir -p $(QUBE_COLLECTION_DIR)/core/plugins/connection
+	mkdir -p $(QUBE_COLLECTION_DIR)/core/plugins/modules
+	mkdir -p $(QUBE_COLLECTION_DIR)/core/plugins/module_utils
+	install -m 644 ansible_collections/qubesos/core/plugins/connection/qubes.py $(QUBE_COLLECTION_DIR)/core/plugins/connection/qubes.py
+	install -m 644 ansible_collections/qubesos/core/plugins/module_utils/*.py $(QUBE_COLLECTION_DIR)/core/plugins/module_utils/
+	install -m 644 ansible_collections/qubesos/core/plugins/modules/*.py $(QUBE_COLLECTION_DIR)/core/plugins/modules/
+
+	# Legacy files
 	mkdir -p $(DESTDIR)/usr/share/ansible/plugins/connection
 	mkdir -p $(DESTDIR)/usr/share/ansible/plugins/modules
+	cp -P plugins/connection/qubes.py $(DESTDIR)/usr/share/ansible/plugins/connection/qubes.py
 	install -m 644 plugins/modules/qubesos.py $(DESTDIR)/usr/share/ansible/plugins/modules/qubesos.py
-	install -m 644 plugins/connection/qubes.py $(DESTDIR)/usr/share/ansible/plugins/connection/qubes.py
+
 
 install-dom0:
 	mkdir -p $(DESTDIR)/usr/lib/qubes/
+	mkdir -p $(QUBE_COLLECTION_DIR)/security/plugins/callback
+	mkdir -p $(QUBE_COLLECTION_DIR)/security/plugins/strategy
+	install -m 644 ansible_collections/qubesos/security/plugins/callback/qubesos_strategy_guard.py $(QUBE_COLLECTION_DIR)/security/plugins/callback/qubesos_strategy_guard.py
+	install -m 644 ansible_collections/qubesos/security/plugins/strategy/qubes_proxy.py $(QUBE_COLLECTION_DIR)/security/plugins/strategy/qubes_proxy.py
+	install -m 755 update-ansible-default-strategy $(DESTDIR)/usr/lib/qubes/update-ansible-default-strategy
+
 	mkdir -p $(DESTDIR)/usr/share/ansible/plugins/callback
 	mkdir -p $(DESTDIR)/usr/share/ansible/plugins/strategy
-	install -m 644 plugins/callback/qubesos_strategy_guard.py $(DESTDIR)/usr/share/ansible/plugins/callback/qubesos_strategy_guard.py
-	install -m 644 plugins/strategy/qubes_proxy.py $(DESTDIR)/usr/share/ansible/plugins/strategy/qubes_proxy.py
-	install -m 755 update-ansible-default-strategy $(DESTDIR)/usr/lib/qubes/update-ansible-default-strategy
+	cp -P plugins/callback/qubesos_strategy_guard.py $(DESTDIR)/usr/share/ansible/plugins/callback/qubesos_strategy_guard.py
+	cp -P plugins/strategy/qubes_proxy.py $(DESTDIR)/usr/share/ansible/plugins/strategy/qubes_proxy.py
 
 install-tests:
 	mkdir -p $(DESTDIR)/usr/share/ansible/tests/qubes

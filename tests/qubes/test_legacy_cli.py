@@ -49,7 +49,7 @@ def run_playbook(tmp_path, ansible_config):
 
 @pytest.mark.parametrize(
     "ansible_config",
-    ["ansible_linear_strategy", "ansible_proxy_strategy"],
+    ["ansible_linear_strategy", "ansible_proxy_strategy_legacy"],
 )
 @pytest.mark.parametrize(
     "target_host",
@@ -65,26 +65,26 @@ def test_create_and_destroy_vm(run_playbook, request, target_host):
             "tasks": [
                 {
                     "name": "Create AppVM",
-                    "qubesos.core.qube": {
+                    "qubesos": {
                         "name": name,
-                        "state": "present",
-                        "klass": "AppVM",
+                        "command": "create",
+                        "vmtype": "AppVM",
                     },
                 },
                 {
                     "name": "Start AppVM",
-                    "qubesos.core.qube": {
+                    "qubesos": {
                         "name": name,
-                        "state": "running",
+                        "command": "start",
                     },
                 },
                 {
-                    "name": "Stop AppVM",
-                    "qubesos.core.qube": {"name": name, "state": "halted"},
+                    "name": "Destroy AppVM",
+                    "qubesos": {"name": name, "command": "destroy"},
                 },
                 {
                     "name": "Remove AppVM",
-                    "qubesos.core.qube": {"name": name, "state": "absent"},
+                    "qubesos": {"name": name, "command": "remove"},
                 },
             ],
         }
@@ -95,7 +95,8 @@ def test_create_and_destroy_vm(run_playbook, request, target_host):
 
 
 @pytest.mark.parametrize(
-    "ansible_config", ["ansible_linear_strategy", "ansible_proxy_strategy"]
+    "ansible_config",
+    ["ansible_linear_strategy", "ansible_proxy_strategy_legacy"],
 )
 @pytest.mark.parametrize(
     "target_host",
@@ -111,7 +112,7 @@ def test_properties_and_tags_playbook(run_playbook, request, target_host):
             "tasks": [
                 {
                     "name": "Create VM with properties",
-                    "qubesos.core.qube": {
+                    "qubesos": {
                         "name": name,
                         "state": "present",
                         "properties": {"autostart": True, "memory": 128},
@@ -120,11 +121,11 @@ def test_properties_and_tags_playbook(run_playbook, request, target_host):
                 },
                 {
                     "name": "Validate VM state",
-                    "qubesos.core.command": {"name": name, "command": "status"},
+                    "qubesos": {"name": name, "command": "status"},
                 },
                 {
                     "name": "Cleanup",
-                    "qubesos.core.qube": {"name": name, "state": "absent"},
+                    "qubesos": {"name": name, "state": "absent"},
                 },
             ],
         }
@@ -138,14 +139,15 @@ def test_properties_and_tags_playbook(run_playbook, request, target_host):
         "changed"
     ], result.stdout
     assert {"tag1", "tag2"} == set(
-        run_output["plays"][0]["tasks"][1]["hosts"][target_host]["diff"][
-            "after"
-        ]["tags"]
+        run_output["plays"][0]["tasks"][1]["hosts"][target_host].get(
+            "Tags updated", []
+        )
     ), result.stdout
 
 
 @pytest.mark.parametrize(
-    "ansible_config", ["ansible_linear_strategy", "ansible_proxy_strategy"]
+    "ansible_config",
+    ["ansible_linear_strategy", "ansible_proxy_strategy_legacy"],
 )
 @pytest.mark.parametrize(
     "target_host",
@@ -159,7 +161,7 @@ def test_inventory_playbook(run_playbook, tmp_path, qubes, target_host):
             "tasks": [
                 {
                     "name": "Create inventory",
-                    "qubesos.core.command": {"command": "createinventory"},
+                    "qubesos": {"command": "createinventory"},
                 }
             ],
         }
@@ -182,13 +184,14 @@ def test_inventory_playbook(run_playbook, tmp_path, qubes, target_host):
 
 
 @pytest.mark.parametrize(
-    "ansible_config", ["ansible_linear_strategy", "ansible_proxy_strategy"]
+    "ansible_config",
+    ["ansible_linear_strategy", "ansible_proxy_strategy_legacy"],
 )
 def test_vm_connection(vm, run_playbook, ansible_config):
     play_attrs = {
         "hosts": vm.name,
         "gather_facts": False,
-        "connection": "qubesos.core.qubes",
+        "connection": "qubes",
     }
 
     default_user_playbook = [
@@ -277,14 +280,13 @@ def test_vm_connection(vm, run_playbook, ansible_config):
     ]
 
     invalid_user_result = run_playbook(invalid_user_playbook, vms=[vm.name])
-
     assert invalid_user_result.returncode == 2, invalid_user_result.stdout
 
     if ansible_config == "ansible_linear_strategy":
         invalid_user_output = json.loads(invalid_user_result.stdout)
         assert (
             invalid_user_output["plays"][0]["tasks"][0]["hosts"][vm.name]["msg"]
-            == f'Invalid value "{invalid_user}" for configuration option "plugin_type: connection plugin: ansible_collections.qubesos.core.plugins.connection.qubes setting: remote_user ", valid values are: user, root'
+            == f'Invalid value "{invalid_user}" for configuration option "plugin_type: connection plugin: qubes setting: remote_user ", valid values are: user, root'
         ), invalid_user_result.stdout
     else:
         assert (
@@ -294,13 +296,14 @@ def test_vm_connection(vm, run_playbook, ansible_config):
 
 
 @pytest.mark.parametrize(
-    "ansible_config", ["ansible_linear_strategy", "ansible_proxy_strategy"]
+    "ansible_config",
+    ["ansible_linear_strategy", "ansible_proxy_strategy_legacy"],
 )
 def test_minimalvm_connection(minimalvm, run_playbook, ansible_config):
     play_attrs = {
         "hosts": minimalvm.name,
         "gather_facts": False,
-        "connection": "qubesos.core.qubes",
+        "connection": "qubes",
     }
 
     default_user_playbook = [
@@ -412,6 +415,28 @@ def test_ansible_doc_qubesos_module():
 
 @pytest.mark.parametrize(
     "ansible_config",
+    ["ansible_linear_strategy", "ansible_proxy_strategy_legacy"],
+)
+def test_state_absent_when_vm_does_not_exist(run_playbook):
+    playbook = [
+        {
+            "hosts": "localhost",
+            "tasks": [
+                {
+                    "name": "Ensure VM doesn't exist",
+                    "qubesos": {"state": "absent", "name": "not_existing_vm"},
+                }
+            ],
+        }
+    ]
+    result = run_playbook(playbook)
+    assert result.returncode == 0, result.stderr
+    output = json.loads(result.stdout)
+    assert not output["plays"][0]["tasks"][1]["hosts"]["localhost"]["changed"]
+
+
+@pytest.mark.parametrize(
+    "ansible_config",
     [
         "ansible_linear_strategy",
     ],
@@ -428,7 +453,7 @@ def test_devices_assignment(
             "tasks": [
                 {
                     "name": "Assign PCI device",
-                    "qubesos.core.qube": {
+                    "qubesos": {
                         "name": vm.name,
                         "state": "present",
                         "devices": {

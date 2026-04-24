@@ -2,6 +2,7 @@
 # Copyright (c) 2017 Ansible Project
 # Copyright (C) 2018 Kushal Das
 # Copyright (C) 2025 Frédéric Pierret (fepitre) <frederic@invisiblethingslab.com>
+# Copyright (C) 2026 Guillaume Chinal (guiiix) <guiiix@invisiblethingslab.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -165,11 +166,26 @@ author:
   - Frédéric Pierret
 """
 
-import asyncio
-import time
+from ansible_collections.qubesos.core.plugins.module_utils.qubes_helper import (
+    QubesHelper,
+    VIRT_FAILED,
+    VIRT_SUCCESS,
+)
+
+from ansible_collections.qubesos.core.plugins.module_utils.qubes_module_host_devices_facts import (
+    core as module_host_devices_facts,
+)
+
+from ansible_collections.qubesos.core.plugins.module_utils.qubes_module_qube import (
+    QubeModule,
+)
+from ansible_collections.qubesos.core.plugins.module_utils.qubes_module_command import (
+    core as module_command,
+)
+
+
 import traceback
 
-from contextlib import suppress
 
 try:
     import qubesadmin
@@ -195,9 +211,6 @@ from jinja2 import Template
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_native
 
-VIRT_FAILED = 1
-VIRT_SUCCESS = 0
-VIRT_UNAVAILABLE = 2
 
 ALL_COMMANDS = []
 VM_COMMANDS = [
@@ -215,14 +228,6 @@ VM_COMMANDS = [
 HOST_COMMANDS = ["info", "list_vms", "get_states", "createinventory"]
 ALL_COMMANDS.extend(VM_COMMANDS)
 ALL_COMMANDS.extend(HOST_COMMANDS)
-
-VIRT_STATE_NAME_MAP = {
-    0: "running",
-    1: "paused",
-    4: "shutdown",
-    5: "shutdown",
-    6: "crashed",
-}
 
 PROPS = {
     "autostart": bool,
@@ -253,6 +258,50 @@ PROPS = {
     "services": list,
     "volumes": list,
 }
+
+
+class ModuleExitWithError(Exception):
+    def __init__(self, reasons):
+        self.reasons = reasons
+
+
+class ValidationFailure(ValueError):
+    """Exception raised for errors when validating module input"""
+
+    def __init__(self, reasons):
+        self.reasons = reasons
+
+
+# Use the same wrapper class as tests to call new module and catch errors
+class FakeModule:
+    def __init__(self, params):
+        self.params = params
+        self.returned_data = None
+
+    def fail_json(self, **kwargs):
+        self.returned_data = kwargs
+        raise ModuleExitWithError(kwargs)
+
+    def exit_json(self, **kwargs):
+        self.returned_data = kwargs
+
+
+def _run_module_host_devices_facts():
+    fake_module = FakeModule({})
+    module_host_devices_facts(fake_module)
+    return fake_module
+
+
+def _run_module_qube(params):
+    fake_module = FakeModule(params)
+    QubeModule(fake_module).run()
+    return fake_module
+
+
+def _run_module_command(params):
+    fake_module = FakeModule(params)
+    module_command(fake_module)
+    return fake_module
 
 
 def create_inventory(result):
@@ -302,404 +351,79 @@ ansible_connection=qubes
         fobj.write(res)
 
 
-class QubesVirt(object):
+def _validate_properties(guest, helper, properties, vmtype):
+    # properties will only work with state=present
+    # Check properties exist (PROPS)
+    # Check netvm exist
+    # Check volume properties
+    # This is only verification: should be conserved as format is different from
+    # qubesos.core.qube
+    if properties:
+        for key, val in properties.items():
+            if key not in PROPS:
+                raise ValidationFailure({"Invalid property": key})
+            if val is not None and type(val) != PROPS[key]:
+                raise ValidationFailure({"Invalid property value type": key})
 
-    def __init__(self, module):
-        self.module = module
-        self.app = qubesadmin.Qubes()
+            # Make sure that the netvm exists
+            if key == "netvm" and val not in [
+                "*default*",
+                "",
+                "none",
+                "None",
+                None,
+                guest,
+            ]:
+                try:
+                    vm = helper.get_vm(val)
+                except KeyError:
+                    raise ValidationFailure({"Missing netvm": val})
+                # Also the vm should provide network
+                if not vm.provides_network:
+                    raise ValidationFailure({"Missing netvm capability": val})
+                netvm = vm
 
-    def get_device_classes(self):
-        """List all available device classes in dom0 (excluding 'testclass')."""
-        return [c for c in self.app.list_deviceclass() if c != "testclass"]
-
-    def find_devices_of_class(self, klass):
-        """Yield the port IDs of all devices matching a given class in dom0."""
-        for dev in self.app.domains["dom0"].devices["pci"]:
-            if repr(dev.interfaces[0]).startswith("p" + klass):
-                yield f"pci:dom0:{dev.port_id}:{dev.device_id}"
-
-    def get_vm(self, vmname):
-        """Retrieve a qube object by its name."""
-        return self.app.domains[vmname]
-
-    def __get_state(self, vmname):
-        """Determine the current power state of a qube."""
-        try:
-            vm = self.app.domains[vmname]
-            if vm.is_paused():
-                return "paused"
-            if vm.is_running():
-                return "running"
-            if vm.is_halted():
-                return "shutdown"
-            return None
-        except KeyError:
-            return "absent"
-
-    def get_states(self):
-        """Get the names and states of all qubes."""
-        state = []
-        for vm in self.app.domains:
-            state.append(f"{vm.name} {self.__get_state(vm.name)}")
-        return state
-
-    def list_vms(self, state):
-        """List all non-dom0 qubes that match a specified state."""
-        res = []
-        for vm in self.app.domains:
-            if vm.name != "dom0" and state == self.__get_state(vm.name):
-                res.append(vm.name)
-        return res
-
-    def all_vms(self):
-        """Group all non-dom0 qubes by their VM class."""
-        res = {}
-        for vm in self.app.domains:
-            if vm.name == "dom0":
-                continue
-            res.setdefault(vm.klass, []).append(vm.name)
-        return res
-
-    def info(self):
-        """Gather detailed info (state, network, label) for all non-dom0 qubes."""
-        info = {}
-        for vm in self.app.domains:
-            if vm.name == "dom0":
-                continue
-            info[vm.name] = {
-                "state": self.__get_state(vm.name),
-                "provides_network": vm.provides_network,
-                "label": vm.label.name,
-            }
-        return info
-
-    def shutdown(self, vmname, wait=False):
-        """
-        Shutdown the specified qube via the given id or name,
-        optionally waiting until it halts.
-        """
-        vm = self.get_vm(vmname)
-        with suppress(QubesVMNotStartedError):
-            vm.shutdown()
-
-        if wait:
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(
-                    asyncio.wait_for(
-                        qubesadmin.events.utils.wait_for_domain_shutdown([vm]),
-                        vm.shutdown_timeout,
-                    )
-                )
-            except asyncio.TimeoutError:
-                raise RuntimeError(
-                    f"Timeout: VM {vmname} did not halt within {vm.shutdown_timeout}s"
-                )
-        return 0
-
-    def restart(self, vmname, wait=False):
-        """
-        Restart the specified qube via the given id or name
-        by shutting it down (with optional wait) and then starting it.
-        """
-        try:
-            self.shutdown(vmname, wait=wait)
-        except RuntimeError:
-            raise
-        vm = self.get_vm(vmname)
-        vm.start()
-        return 0
-
-    def pause(self, vmname):
-        """Pause the specified qube via the given id or name."""
-        vm = self.get_vm(vmname)
-        vm.pause()
-        return 0
-
-    def unpause(self, vmname):
-        """Unpause the specified qube via the given id or name."""
-        vm = self.get_vm(vmname)
-        vm.unpause()
-        return 0
-
-    def create(
-        self,
-        vmname,
-        vmtype,
-        label="red",
-        template=None,
-        netvm="*default*",
-    ):
-        """Create a new qube of the given type, label, template, and network."""
-        template_vm = template or ""
-        if netvm == "*default*":
-            network_vm = qubesadmin.DEFAULT
-        elif not netvm:
-            network_vm = None
-        else:
-            network_vm = self.get_vm(netvm)
-        if vmtype == "AppVM":
-            if template_vm and self.get_vm(template_vm)._klass == vmtype:
-                vm = self.app.clone_vm(
-                    template_vm, vmname, vmtype, ignore_devices=True
-                )
-            else:
-                vm = self.app.add_new_vm(
-                    vmtype, vmname, label, template=template_vm
-                )
-            vm.netvm = network_vm
-        elif vmtype in ["StandaloneVM", "TemplateVM"] and template_vm:
-            vm = self.app.clone_vm(
-                template_vm, vmname, vmtype, ignore_devices=True
-            )
-            vm.label = label
-        elif vmtype == "DispVM" and template_vm:
-            vm = self.app.add_new_vm(
-                vmtype, vmname, label, template=template_vm
-            )
-            vm.netvm = network_vm
-        return 0
-
-    def start(self, vmname):
-        """Start the specified qube via the given id or name"""
-        vm = self.get_vm(vmname)
-        vm.start()
-        return 0
-
-    def destroy(self, vmname):
-        """Immediately kill the specified qube via the given id or name (no graceful shutdown)."""
-        vm = self.get_vm(vmname)
-        vm.kill()
-        return 0
-
-    def properties(self, vmname, prefs):
-        """Sets the given properties to the qube"""
-        changed = False
-        values_changed = []
-        vm = self.get_vm(vmname)
-
-        # VM-reference properties
-        vm_ref_keys = [
-            "audiovm",
-            "default_dispvm",
-            "default_user",
-            "guivm",
-            "management_dispvm",
-            "netvm",
-            "template",
-        ]
-
-        for key, val in prefs.items():
-            # use of `features` nested in properties is legacy use. Drop by 2030
-            if key == "features":
-                if self.features(vmname, val):
-                    changed = True
-                    if "features" not in values_changed:
-                        values_changed.append("features")
-
-            elif key == "services":
-                for svc in val:
-                    feat = f"service.{svc}"
-                    if vm.features.get(feat) != "1":
-                        vm.features[feat] = "1"
-                        changed = True
-                if changed and "features" not in values_changed:
-                    values_changed.append("features")
-
-            elif key == "volumes":
-                for vol in prefs.get("volumes", []):
+            # Make sure volume has both name and value
+            if key == "volumes":
+                if not isinstance(val, list):
+                    raise ValidationFailure({"Invalid volumes provided": val})
+                for vol in val:
                     try:
-                        volume = vm.volumes[vol["name"]]
-                        volume.resize(vol["size"])
-                    except Exception:
-                        return VIRT_FAILED, {
-                            "Failure in updating volume": vol["name"]
-                        }
-                    changed = True
-                    values_changed.append(f"volume:{vol["name"]}")
+                        if "name" not in vol:
+                            raise ValidationFailure(
+                                {"Missing name for the volume": vol}
+                            )
+                        if "size" not in vol:
+                            raise ValidationFailure(
+                                {"Missing size for the volume": vol}
+                            )
+                        if not vol["name"] in ["root", "private"]:
+                            raise ValidationFailure(
+                                {"Wrong volume name": vol["name"]}
+                            )
+                        if vol["name"] == "root" and vmtype not in [
+                            "TemplateVM",
+                            "StandaloneVM",
+                        ]:
+                            raise ValidationFailure(
+                                {
+                                    f"Cannot change root volume size for '{vmtype}'"
+                                }
+                            )
+                    except KeyError:
+                        raise ValidationFailure(
+                            {"Invalid volume provided": vol}
+                        )
 
-            else:
-                # determine new value or default
-                if val in (None, ""):
-                    new_val = ""
-                elif val == "*default*":
-                    new_val = qubesadmin.DEFAULT
-                else:
-                    new_val = val
-                # check and apply change
-                if new_val is qubesadmin.DEFAULT:
-                    if not vm.property_is_default(key):
-                        setattr(vm, key, new_val)
-                        changed = True
-                        values_changed.append(key)
-                else:
-                    if getattr(vm, key) != new_val:
-                        setattr(vm, key, new_val)
-                        changed = True
-                        values_changed.append(key)
-
-        return changed, values_changed
-
-    def notes(self, vmname: str, new_notes: str) -> bool:
-        """Set the qube notes. Returns true if changed"""
-        vm = self.get_vm(vmname)
-        current_notes = vm.get_notes()
-        if current_notes == new_notes:
-            return False
-        vm.set_notes(new_notes)
-        return True
-
-    def features(self, vmname: str, feats: dict[str, str | None]) -> list:
-        """Sets the given featuress to the qube"""
-        features_changed = []
-        vm = self.get_vm(vmname)
-        for fkey, fval in feats.items():
-            if fval is None:
-                if fkey in vm.features:
-                    del vm.features[fkey]
-                    features_changed.append(fkey)
-            elif vm.features.get(fkey) != fval:
-                vm.features[fkey] = fval
-                features_changed.append(fkey)
-        return features_changed
-
-    def remove(self, vmname):
-        """Destroy and then delete a qube's configuration and disk."""
-        try:
-            self.destroy(vmname)
-        except QubesVMNotStartedError:
-            pass
-        while True:
-            if self.__get_state(vmname) == "shutdown":
-                break
-            time.sleep(1)
-        del self.app.domains[vmname]
-        return 0
-
-    def status(self, vmname):
-        """
-        Return a state suitable for server consumption.  Aka, codes.py values, not XM output.
-        """
-        return self.__get_state(vmname)
-
-    def tags(self, vmname, tags):
-        """Add a list of tags to a qube, skipping any already present."""
-        vm = self.get_vm(vmname)
-        updated_tags = []
-        for tag in tags:
-            if tag in vm.tags:
-                continue
-            vm.tags.add(tag)
-            updated_tags.append(tag)
-        return updated_tags
-
-    def parse_device(self, spec):
-        """Parse a device specification string into its class and VirtualDevice."""
-        parts = spec.split(":", 1)
-        if len(parts) != 2:
-            self.module.fail_json(msg=f"Invalid spec {spec}")
-        devclass, rest = parts
-        if devclass not in self.get_device_classes():
-            self.module.fail_json(msg=f"Invalid devclass {devclass}")
-        try:
-            device = VirtualDevice.from_str(rest, devclass, self.app.domains)
-            return devclass, device
-        except Exception as e:
-            self.module.fail_json(msg=f"Cannot parse device {spec}: {e}")
-            return None
-
-    def list_assigned_devices(self, vmname, devclass):
-        """List currently assigned devices of a given class for a qube."""
-        vm = self.get_vm(vmname)
-        current = {}
-        for ass in vm.devices[devclass].get_assigned_devices():
-            # get the VirtualDevice
-            d = getattr(ass, "virtual_device", None) or ass.device
-            spec = f"{devclass}:{d.backend_domain}:{d.port_id}:{d.device_id}"
-            mode = getattr(ass, "mode", None)
-            opts = getattr(ass, "options", None) or {}
-            current[spec] = (mode, opts)
-        return current
-
-    def assign(self, vmname, devclass, device_assignment):
-        """Assign a device to the specified qube."""
-        vm = self.get_vm(vmname)
-        vm.devices[devclass].assign(device_assignment)
-        return 0
-
-    def unassign(self, vmname, devclass, device_assignment):
-        """Remove an assigned device from the specified qube."""
-        vm = self.get_vm(vmname)
-        vm.devices[devclass].unassign(device_assignment)
-        return 0
-
-    def sync_devices(self, vmname, devclass, desired):
-        """Synchronize a qube's device assignments to match the desired configuration."""
-        # build desired map: spec -> (vd, per_mode, opts)
-        desired_map = {
-            f"{devclass}:{vd.backend_domain}:{vd.port_id}:{vd.device_id}": (
-                vd,
-                per_mode,
-                opts or {},
-            )
-            for vd, per_mode, opts in (desired or [])
-        }
-
-        changed = False
-
-        # current assignments: spec -> (mode, opts)
-        current_map = self.list_assigned_devices(vmname, devclass)
-        current_specs = set(current_map)
-        desired_specs = set(desired_map)
-
-        # 1) Unassign anything not in desired
-        for spec in current_specs - desired_specs:
-            cls, dev = self.parse_device(spec)
-            self.unassign(
-                vmname,
-                cls,
-                DeviceAssignment(dev, frontend_domain=self.get_vm(vmname)),
-            )
-            changed = True
-
-        # 2) Reassign anything whose mode or options differ
-        for spec in current_specs & desired_specs:
-            existing_mode, existing_opts = current_map[spec]
-            vd, per_mode, opts = desired_map[spec]
-            # normalize desired_mode
-            desired_mode = per_mode or (
-                "required" if devclass == "pci" else "auto-attach"
-            )
-            if existing_mode.value != desired_mode or existing_opts != opts:
-                # tear down the old and set up the new
-                cls, dev = self.parse_device(spec)
-                self.unassign(
-                    vmname,
-                    cls,
-                    DeviceAssignment(dev, frontend_domain=self.get_vm(vmname)),
-                )
-                self.assign(
-                    vmname,
-                    devclass,
-                    DeviceAssignment(vd, mode=desired_mode, options=opts),
-                )
-                changed = True
-
-        # 3) Assign any new specs
-        for spec in desired_specs - current_specs:
-            vd, per_mode, opts = desired_map[spec]
-            assign_mode = per_mode or (
-                "required" if devclass == "pci" else "auto-attach"
-            )
-            self.assign(
-                vmname,
-                devclass,
-                DeviceAssignment(vd, mode=assign_mode, options=opts),
-            )
-            changed = True
-
-        return changed
+            # Make sure that the default_dispvm exists
+            if key == "default_dispvm" and val != guest:
+                try:
+                    vm = helper.get_vm(val)
+                except KeyError:
+                    raise ValidationFailure({"Missing default_dispvm": val})
+                # Also the vm should provide network
+                if not vm.template_for_dispvms:
+                    raise ValidationFailure({"Missing dispvm capability": val})
 
 
 def core(module):
@@ -714,91 +438,13 @@ def core(module):
     tags = module.params.get("tags", [])
     devices = module.params.get("devices", None)
     notes = module.params.get("notes", None)
-    netvm = None
-    res = {}
-    device_specs = []
 
-    v = QubesVirt(module)
+    v = QubesHelper(module)
 
-    # Normalize devices into (set_mode, device_specs)
-    if isinstance(devices, dict):
-        set_mode = devices.get("strategy", "strict")
-        device_specs = devices.get("items") or []
-    elif isinstance(devices, list):
-        # flat list -> always strict
-        set_mode = "strict"
-        device_specs = devices
-    elif devices is None:
-        device_specs = []
-    else:
-        module.fail_json(msg=f"Invalid devices parameter: {devices!r}")
-
-    # Now expand each spec into (class, VirtualDevice, per_mode, options)
-    normalized_devices = []
-    for entry in device_specs:
-        if isinstance(entry, str):
-            # simple string spec -> no per-device mode or options
-            cls, vd = v.parse_device(entry)
-            normalized_devices.append((cls, vd, None, []))
-        elif isinstance(entry, dict):
-            # dict spec must have a "device" key
-            device_str = entry.get("device")
-            if not device_str:
-                module.fail_json(
-                    msg=f"Device entry missing 'device': {entry!r}"
-                )
-            cls, vd = v.parse_device(device_str)
-            # optional per-device mode (e.g. "required" or "auto-attach")
-            per_mode = entry.get("mode")
-            # optional options list
-            opts = entry.get("options", {})
-            normalized_devices.append((cls, vd, per_mode, opts))
-        else:
-            module.fail_json(msg=f"Invalid device entry: {entry!r}")
-
-    def apply_devices(vmname):
-        devices_changed = False
-        for device_class in v.get_device_classes():
-            # gather only the entries for this class
-            wants = [
-                (vd, per_mode, opts)
-                for (cls, vd, per_mode, opts) in normalized_devices
-                if cls == device_class
-            ]
-            if set_mode == "strict":
-                devices_changed |= v.sync_devices(vmname, device_class, wants)
-            elif set_mode == "append":
-                current_map = v.list_assigned_devices(vmname, device_class)
-                for vd, per_mode, opts in wants:
-                    spec = f"{device_class}:{vd.backend_domain}:{vd.port_id}:{vd.device_id}"
-                    if spec in current_map:
-                        # already present -> leave it (no mode/options change in append mode)
-                        continue
-                    # new device -> assign with its mode/options
-                    assign_mode = per_mode or (
-                        "required" if device_class == "pci" else "auto-attach"
-                    )
-                    v.assign(
-                        vmname,
-                        device_class,
-                        DeviceAssignment(vd, mode=assign_mode, options=opts),
-                    )
-                    devices_changed = True
-            else:
-                module.fail_json(msg=f"Invalid devices strategy: {set_mode}")
-        return devices_changed
-
-    # gather device facts
-    if module.params.get("gather_device_facts", False):
-        facts = {
-            "pci_net": sorted(v.find_devices_of_class("02")),
-            "pci_usb": sorted(v.find_devices_of_class("0c03")),
-            "pci_audio": sorted(
-                list(v.find_devices_of_class("0401"))
-                + list(v.find_devices_of_class("0403"))
-            ),
-        }
-        return VIRT_SUCCESS, {"changed": False, "ansible_facts": facts}
+    if module.params.get("wait") == False:
+        module.warn(
+            f"usage of 'wait' parameter in qubesos module is no more supported."
+        )
 
     if state == "present" and guest:
         try:
@@ -807,221 +453,196 @@ def core(module):
         except KeyError:
             # Set default vmtype to AppVM if vmtype is not provided
             vmtype = vmtype or "AppVM"
-            v.create(guest, vmtype, label, template)
 
-    # properties will only work with state=present
-    if properties:
-        for key, val in properties.items():
-            if key not in PROPS:
-                return VIRT_FAILED, {"Invalid property": key}
-            if type(val) != PROPS[key]:
-                return VIRT_FAILED, {"Invalid property value type": key}
+    # Validation
+    try:
+        _validate_properties(guest, v, properties, vmtype)
+    except ValidationFailure as e:
+        return VIRT_FAILED, e.reasons
 
-            # Make sure that the netvm exists
-            if key == "netvm" and val not in ["*default*", "", "none", "None"]:
-                try:
-                    vm = v.get_vm(val)
-                except KeyError:
-                    return VIRT_FAILED, {"Missing netvm": val}
-                # Also the vm should provide network
-                if not vm.provides_network:
-                    return VIRT_FAILED, {"Missing netvm capability": val}
-                netvm = vm
+    # gather device facts
+    # here, we just need to call the relevant module and retrieve the facts
+    if module.params.get("gather_device_facts", False):
+        fake_module = _run_module_host_devices_facts()
+        return VIRT_SUCCESS, {
+            "changed": False,
+            "ansible_facts": fake_module.returned_data["ansible_facts"],
+        }
 
-            # Make sure volume has both name and value
-            if key == "volumes":
-                if not isinstance(val, list):
-                    return VIRT_FAILED, {"Invalid volumes provided": val}
-                for vol in val:
-                    try:
-                        if "name" not in vol:
-                            return VIRT_FAILED, {
-                                "Missing name for the volume": vol
-                            }
-                        if "size" not in vol:
-                            return VIRT_FAILED, {
-                                "Missing size for the volume": vol
-                            }
-                        if not vol["name"] in ["root", "private"]:
-                            return VIRT_FAILED, {
-                                "Wrong volume name": vol["name"]
-                            }
-                        if vol["name"] == "root" and vmtype not in [
-                            "TemplateVM",
-                            "StandaloneVM",
-                        ]:
-                            return VIRT_FAILED, {
-                                f"Cannot change root volume size for '{vmtype}'"
-                            }
-                    except KeyError:
-                        return VIRT_FAILED, {"Invalid volume provided": vol}
-
-            # Make sure that the default_dispvm exists
-            if key == "default_dispvm":
-                try:
-                    vm = v.get_vm(val)
-                except KeyError:
-                    return VIRT_FAILED, {"Missing default_dispvm": val}
-                # Also the vm should provide network
-                if not vm.template_for_dispvms:
-                    return VIRT_FAILED, {"Missing dispvm capability": val}
-
-    if state == "present" and guest and vmtype:
-        prop_changed, prop_vals = v.properties(guest, properties)
-        # Apply the tags
-        tags_changed = []
-        if tags:
-            tags_changed = v.tags(guest, tags)
-        feats_changed = []
-        if features:
-            feats_changed = v.features(guest, features)
-        if devices is not None:
-            dev_changed = apply_devices(guest)
-        else:
-            dev_changed = False
-        res = {"changed": prop_changed or dev_changed}
-        if tags_changed:
-            res["Tags updated"] = tags_changed
-        if feats_changed:
-            res["Features updated"] = feats_changed
-        if prop_changed:
-            res["Properties updated"] = prop_vals
-        if dev_changed:
-            res["Devices updated"] = True
-        if notes:
-            res["Notes updated"] = v.notes(guest, notes)
-        return VIRT_SUCCESS, res
-
-    # notes will only work with state=present
-    if notes and state == "present" and guest and vmtype:
-        result = v.notes(guest, notes)
-        return VIRT_SUCCESS, {"changed": result, "Notes updated": result}
-
-    # features will only work with state=present
-    if features and state == "present" and guest and vmtype:
-        res = v.features(guest, features)
-        return VIRT_SUCCESS, {"changed": bool(res), "Features updated": res}
-
-    # This is without any properties
+    # Okay, we have a state and a target, we'll have to call qubesos.core.qube
+    # Let's re-arrange the args to make him happy
     if state == "present" and guest:
-        try:
-            v.get_vm(guest)
-            dev_changed = apply_devices(guest)
-            res = {"changed": dev_changed}
-        except KeyError:
-            v.create(guest, vmtype, label, template)
-            # Apply the tags
-            tags_changed = []
-            if tags:
-                tags_changed = v.tags(guest, tags)
-            apply_devices(guest)
-            res = {"changed": True, "created": guest, "devices": devices}
-            if tags_changed:
-                res["tags"] = tags_changed
-        return VIRT_SUCCESS, res
+        # Process conversion from legacy module format to new module format
 
-    # list_vms, get_states, createinventory commands
-    if state and command == "list_vms":
-        res = v.list_vms(state=state)
-        if not isinstance(res, dict):
-            res = {command: res}
-        return VIRT_SUCCESS, res
+        # template / clone_src
+        # Legacy module was cloning VMs in those cases
+        if (
+            vmtype == "AppVM"
+            and template
+            and v.get_vm(template)._klass == "AppVM"
+        ):
+            # Clone VM when specifying
+            clone_src = template
 
-    if command == "get_states":
-        states = v.get_states()
-        res = {"states": states}
-        return VIRT_SUCCESS, res
-
-    if command == "createinventory":
-        result = v.all_vms()
-        create_inventory(result)
-        return VIRT_SUCCESS, {"status": "successful"}
-
-    # single-command VM operations
-    if command:
-        if command in VM_COMMANDS:
-            if not guest:
-                module.fail_json(msg=f"{command} requires 1 argument: guest")
-            if command == "create":
-                try:
-                    v.get_vm(guest)
-                except KeyError:
-                    v.create(guest, vmtype, label, template, netvm)
-                    res = {"changed": True, "created": guest}
-                return VIRT_SUCCESS, res
-            elif command == "removetags":
-                vm = v.get_vm(guest)
-                changed = False
-                if not tags:
-                    return VIRT_FAILED, {"Error": "Missing tag(s) to remove."}
-                for tag in tags:
-                    try:
-                        vm.tags.remove(tag)
-                        changed = True
-                    except QubesTagNotFoundError:
-                        pass
-                return VIRT_SUCCESS, {
-                    "Message": "Removed the tag(s).",
-                    "changed": changed,
-                }
-            res = getattr(v, command)(guest)
-            if not isinstance(res, dict):
-                res = {command: res}
-            return VIRT_SUCCESS, res
-        elif hasattr(v, command):
-            res = getattr(v, command)()
-            if not isinstance(res, dict):
-                res = {command: res}
-            return VIRT_SUCCESS, res
-
+            # Don't mange the template, will be set automatically when cloning
+            template = None
+        elif vmtype in ["StandaloneVM", "TemplateVM"] and template:
+            clone_src = template
+            template = None
         else:
-            module.fail_json(msg=f"Command {command} not recognized")
+            clone_src = None
+
+        # properties / features / services / volumes
+        volumes = None
+        services = None
+        if properties:
+            # Features
+            # extract features from the properties key
+            properties_feature = properties.pop("features", {})
+            if properties_feature or features:
+                if features is None:
+                    features = {}
+
+                for feat_item, feat_val in properties_feature.items():
+                    # In legacy module, features from high level feature key
+                    # were enforced after features in set in sub element of
+                    # properties
+                    if feat_item not in features:
+                        features[feat_item] = feat_val
+
+            # Services
+            # just extract the key from properties. No modification is needed
+            services = properties.pop("services", None)
+
+            # Volumes
+            properties_volumes = properties.pop("volumes", [])
+            if properties_volumes:
+                volumes = {}
+                for vol in properties_volumes:
+                    volumes[vol["name"]] = {"size": vol["size"]}
+
+            # Label is not a module param for the new module
+            if not properties:
+                properties = {}
+            properties["label"] = label
+
+        # Call the module
+        try:
+            fake_module = _run_module_qube(
+                {
+                    "clone_src": clone_src,
+                    "devices": devices,
+                    "features": features,
+                    "klass": vmtype,
+                    "name": guest,
+                    "notes": notes,
+                    "properties": {
+                        prop_name: None if prop_val == "None" else prop_val
+                        for prop_name, prop_val in properties.items()
+                    },
+                    "services": services,
+                    "shutdown_if_required": False,
+                    "state": state,
+                    "tags": tags,
+                    "template": template,
+                    "volumes": volumes,
+                }
+            )
+
+            # Now, try to translate new returned data to legacy ones
+            res_properties_updates = []
+            returned_data = fake_module.returned_data
+
+            # Tags
+            tags_updates = (
+                fake_module.returned_data.get("diff", {})
+                .get("after", {})
+                .get("tags")
+            )
+            if tags_updates:
+                returned_data["Tags updated"] = tags_updates
+
+            # Features
+            features_updates = (
+                fake_module.returned_data.get("diff", {})
+                .get("after", {})
+                .get("features")
+            )
+            if features_updates:
+                returned_data["Features updated"] = list(
+                    features_updates.keys()
+                )
+                res_properties_updates.append("features")
+
+            # Volumes (properties)
+            volume_updates = (
+                fake_module.returned_data.get("diff", {})
+                .get("after", {})
+                .get("volumes")
+            )
+            if volume_updates:
+                res_properties_updates += [
+                    f"volume:{volume}" for volume in volume_updates
+                ]
+
+            # Properties
+            properties_updates = (
+                fake_module.returned_data.get("diff", {})
+                .get("after", {})
+                .get("properties")
+            )
+            if properties_updates:
+                res_properties_updates += list(properties_updates.keys())
+            if res_properties_updates:
+                returned_data["Properties updated"] = res_properties_updates
+
+            # Devices
+            devices_updates = (
+                fake_module.returned_data.get("diff", {})
+                .get("after", {})
+                .get("devices")
+            )
+            if devices_updates:
+                returned_data["Devices updated"] = True
+
+            notes_updates = (
+                fake_module.returned_data.get("diff", {})
+                .get("after", {})
+                .get("notes")
+            )
+            if notes:
+                returned_data["Notes updated"] = True
+            return VIRT_SUCCESS, fake_module.returned_data
+
+        except ModuleExitWithError as e:
+            return VIRT_FAILED, e.reasons
+
+    # Commands
+    if command:
+        try:
+            fake_module = _run_module_command(module.params)
+            return VIRT_SUCCESS, fake_module.returned_data
+        except ModuleExitWithError as e:
+            return VIRT_FAILED, e.reasons
 
     if state:
         if not guest:
             module.fail_json(msg="State change requires a guest specified")
-        current = v.status(guest)
-        if state == "running":
-            if current == "paused":
-                res["changed"] = True
-                res["msg"] = v.unpause(guest)
-            elif current != "running":
-                res["changed"] = True
-                res["msg"] = v.start(guest)
-        elif state == "shutdown":
-            if current != "shutdown":
-                res["changed"] = True
-                try:
-                    v.shutdown(guest, wait=module.params.get("wait", False))
-                except RuntimeError as e:
-                    module.fail_json(msg=str(e))
-        elif state == "restarted":
-            res["changed"] = True
-            try:
-                v.restart(guest, wait=module.params.get("wait", False))
-                res["msg"] = "restarted"
-            except RuntimeError as e:
-                module.fail_json(msg=str(e))
-        elif state == "destroyed":
-            if current != "shutdown":
-                res["changed"] = True
-                res["msg"] = v.destroy(guest)
-        elif state == "pause":
-            if current == "running":
-                res["changed"] = True
-                res["msg"] = v.pause(guest)
-        elif state == "absent":
-            if current == "shutdown":
-                res["changed"] = True
-                res["msg"] = v.remove(guest)
-        else:
-            module.fail_json(msg="Unexpected state")
 
-        return VIRT_SUCCESS, res
+        try:
+            fake_module = _run_module_qube(
+                {
+                    "name": guest,
+                    "state": state,
+                }
+            )
+            return VIRT_SUCCESS, fake_module.returned_data
+        except RuntimeError as e:
+            module.fail_json(msg=str(e))
+        except ModuleExitWithError as e:
+            return VIRT_FAILED, e.reasons
 
     module.fail_json(msg="Expected state or command parameter to be specified")
-
-    return None
 
 
 def main():
@@ -1040,7 +661,7 @@ def main():
                     "present",
                 ],
             ),
-            wait=dict(type="bool", default=False),
+            wait=dict(type="bool", default=True),
             command=dict(type="str", choices=ALL_COMMANDS),
             label=dict(type="str", default="red"),
             vmtype=dict(type="str", default="AppVM"),
@@ -1052,6 +673,11 @@ def main():
             notes=dict(type="str", default=None),
             gather_device_facts=dict(type="bool", default=False),
         ),
+    )
+
+    module.deprecate(
+        "Usage of this module is deprecated and support will be dropped in a "
+        "future release. Consider switching to qubes.core.qubes module instead.",
     )
 
     if not qubesadmin:

@@ -1,3 +1,4 @@
+import pytest
 import os
 import time
 
@@ -164,6 +165,90 @@ def test_create_clone_vmtype_combinations(qubes, vmname, request):
     # core(Module({"state": "absent", "name": f"{vmname}-clone-templatevm"}))
     # core(Module({"state": "absent", "name": f"{vmname}-clone-standalonevm"}))
     core(Module({"state": "absent", "name": vmname}))
+
+
+def test_create_clone_vmtype_combinations_2(qubes, vmname, request):
+    request.node.mark_vm_created(vmname)
+    appvm_clone_name = f"{vmname}-appcln"
+    appvm_clone_name_2 = f"{vmname}-appcln2"
+    template_clone_name = f"{vmname}-tplcln"
+    standalone_clone_name_1 = f"{vmname}-std"
+    standalone_clone_name_2 = f"{vmname}-std-2"
+    request.node.mark_vm_created(appvm_clone_name)
+    request.node.mark_vm_created(appvm_clone_name_2)
+    request.node.mark_vm_created(template_clone_name)
+    request.node.mark_vm_created(standalone_clone_name_1)
+    request.node.mark_vm_created(standalone_clone_name_2)
+
+    # 1- create an AppVM
+    rc, returned_data = core(
+        Module({"state": "present", "name": vmname, "vmtype": "AppVM"})
+    )
+    assert returned_data["created"]
+
+    # 2- Clone this AppVM
+    rc, returned_data = core(
+        Module(
+            {
+                "state": "present",
+                "name": appvm_clone_name,
+                "vmtype": "AppVM",
+                "template": vmname,
+            }
+        )
+    )
+    qubes.domains.refresh_cache(force=True)
+    assert returned_data["created"]
+    assert appvm_clone_name in qubes.domains
+    assert qubes.domains[appvm_clone_name].klass == "AppVM"
+
+    # 3- Clone a template
+    rc, returned_data = core(
+        Module(
+            {
+                "state": "present",
+                "name": template_clone_name,
+                "vmtype": "TemplateVM",
+                "template": qubes.default_template,
+            }
+        )
+    )
+    qubes.domains.refresh_cache(force=True)
+    assert returned_data["created"]
+    assert template_clone_name in qubes.domains
+    assert qubes.domains[template_clone_name].klass == "TemplateVM"
+
+    # 4- Create a Standalone VM from that template
+    core(
+        Module(
+            {
+                "state": "present",
+                "name": standalone_clone_name_1,
+                "vmtype": "StandaloneVM",
+                "template": template_clone_name,
+            }
+        )
+    )
+    qubes.domains.refresh_cache(force=True)
+    assert returned_data["created"]
+    assert standalone_clone_name_1 in qubes.domains
+    assert qubes.domains[standalone_clone_name_1].klass == "StandaloneVM"
+
+    # 5- Clone this StandaloneVM
+    core(
+        Module(
+            {
+                "state": "present",
+                "name": standalone_clone_name_2,
+                "vmtype": "StandaloneVM",
+                "template": standalone_clone_name_1,
+            }
+        )
+    )
+    qubes.domains.refresh_cache(force=True)
+    assert returned_data["created"]
+    assert standalone_clone_name_2 in qubes.domains
+    assert qubes.domains[standalone_clone_name_2].klass == "StandaloneVM"
 
 
 def test_volumes_list_for_standalonevm(qubes, vmname, request):
@@ -524,7 +609,7 @@ def test_removetags_errors_if_no_tags_present(qubes, vmname, request):
     # Remove tags
     rc, res = core(Module({"command": "removetags", "name": vmname}))
     assert rc == VIRT_FAILED
-    assert "Missing tag" in res.get("Error", "")
+    assert res["msg"] == "Expected 'tags' parameter to be specified"
 
 
 def test_devices_pci_facts_match_actual(qubes):
@@ -574,6 +659,40 @@ def test_devices_strict_single_pci_assignment(
                 "state": "present",
                 "name": vmname,
                 "devices": [port],
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+
+    qubes.domains.refresh_cache(force=True)
+    assigned = qubes.domains[vmname].devices["pci"].get_assigned_devices()
+    ports_assigned = [
+        (
+            f"pci:dom0:{d.virtual_device.port_id}"
+            if hasattr(d, "virtual_device")
+            else d.port_id
+        )
+        for d in assigned
+    ]
+    assert ports_assigned == [port]
+
+    # Clean up
+    core(Module({"state": "absent", "name": vmname}))
+
+
+def test_devices_explicit_strict_assignment(
+    qubes, vmname, request, latest_net_ports
+):
+    request.node.mark_vm_created(vmname)
+    port = latest_net_ports[-1]
+
+    # Create VM in strict mode with only one PCI device
+    rc, res = core(
+        Module(
+            {
+                "state": "present",
+                "name": vmname,
+                "devices": {"strategy": "strict", "items": [port]},
             }
         )
     )
@@ -931,6 +1050,7 @@ def test_services_and_explicit_features_combined(qubes, vmname, request):
         assert qube.features[key] == "1"
 
 
+@pytest.mark.xfail(reason="dropped support for wait param")
 def test_lifecycle_shutdown_with_and_without_wait(qubes, vmname, request):
     request.node.mark_vm_created(vmname)
 
@@ -1105,3 +1225,97 @@ def test_properties_invalid_type_for_new_properties(qubes, vmname, request):
     )
     assert rc2 == VIRT_FAILED
     assert "Invalid property value type" in res2
+
+
+def test_set_property_to_empty_string(vm, qubes):
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vm.name,
+                "properties": {"netvm": "sys-net"},
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vm.name].netvm == "sys-net"
+
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vm.name,
+                "properties": {"netvm": ""},
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vm.name].netvm == None
+
+
+def test_set_property_to_none(vm, qubes):
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vm.name,
+                "properties": {"netvm": "sys-net"},
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vm.name].netvm == "sys-net"
+
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vm.name,
+                "properties": {"netvm": None},
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vm.name].netvm == None
+
+
+def test_set_property_to_none_str(vm, qubes):
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vm.name,
+                "properties": {"netvm": "sys-net"},
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vm.name].netvm == "sys-net"
+
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vm.name,
+                "properties": {"netvm": "None"},
+            }
+        )
+    )
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vm.name].netvm == None
+
+
+def test_create_vm_which_is_its_self_dispvm(vmname, request, qubes):
+    request.node.mark_vm_created(vmname)
+    rc, _ = core(
+        Module(
+            {
+                "state": "present",
+                "name": vmname,
+                "properties": {"default_dispvm": vmname},
+            }
+        )
+    )
+
+    assert rc == VIRT_SUCCESS
+    assert qubes.domains[vmname].default_dispvm == vmname
