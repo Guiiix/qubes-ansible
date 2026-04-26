@@ -1341,3 +1341,23 @@ def test_label_change(vmname, request, qubes):
     assert not returned_data["created"]
     assert returned_data["diff"]["before"]["properties"]["label"] == "yellow"
     assert returned_data["diff"]["after"]["properties"]["label"] == "green"
+
+
+def test_label_should_be_changed_only_when_specified(vmname, request, qubes):
+    request.node.mark_vm_created(vmname)
+
+    rc, returned_data = core(
+        Module({"state": "present", "name": vmname, "label": "yellow"})
+    )
+    assert rc == VIRT_SUCCESS
+    assert str(qubes.domains[vmname].label) == "yellow"
+    assert returned_data["changed"]
+    assert returned_data["diff"]["after"]["properties"]["label"] == "yellow"
+
+    rc, returned_data = core(Module({"state": "present", "name": vmname}))
+    assert rc == VIRT_SUCCESS
+    qubes.domains.refresh_cache(force=True)
+    assert str(qubes.domains[vmname].label) == "yellow"
+    assert not returned_data["changed"]
+    assert "properties" not in returned_data["diff"]["before"]
+    assert "properties" not in returned_data["diff"]["after"]
