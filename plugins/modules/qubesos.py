@@ -521,10 +521,10 @@ def core(module):
                 for vol in properties_volumes:
                     volumes[vol["name"]] = {"size": vol["size"]}
 
-            # Label is not a module param for the new module
-            if not properties:
-                properties = {}
-            properties["label"] = label
+        # Label is not a module param for the new module
+        if not properties:
+            properties = {}
+        properties["label"] = label
 
         # Call the module
         try:
