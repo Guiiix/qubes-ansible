@@ -1319,3 +1319,39 @@ def test_create_vm_which_is_its_self_dispvm(vmname, request, qubes):
 
     assert rc == VIRT_SUCCESS
     assert qubes.domains[vmname].default_dispvm == vmname
+
+
+def test_setting_qube_value_to_the_same_value_than_default(vm):
+    assert vm.property_is_default("netvm")
+    netvm = vm.netvm.name
+
+    mod = Module(
+        {
+            "state": "present",
+            "name": vm.name,
+            "properties": {"netvm": netvm},
+        }
+    )
+    rc, returned_data = core(mod)
+    assert rc == VIRT_SUCCESS, returned_data
+    assert returned_data["changed"]
+    assert vm.netvm == netvm
+    assert not vm.property_is_default("netvm")
+
+    # Idempotence
+    rc, returned_data = core(mod)
+    assert rc == VIRT_SUCCESS, returned_data
+    assert not returned_data["changed"]
+
+    mod = Module(
+        {
+            "state": "present",
+            "name": vm.name,
+            "properties": {"netvm": "*default*"},
+        }
+    )
+    rc, returned_data = core(mod)
+    assert rc == VIRT_SUCCESS, returned_data
+    assert returned_data["changed"]
+    assert vm.netvm == netvm
+    assert vm.property_is_default("netvm")
