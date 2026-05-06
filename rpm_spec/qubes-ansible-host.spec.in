@@ -40,7 +40,6 @@ make DESTDIR=$RPM_BUILD_ROOT install-dom0
 
 %post
 /usr/lib/qubes/update-ansible-default-strategy
-chown root:user /etc/qubes/policy.d/30-qubes-ansible.policy
 
 %triggerin -- ansible
 /usr/lib/qubes/update-ansible-default-strategy
