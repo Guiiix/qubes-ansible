@@ -7,4 +7,4 @@ export DESTDIR=$(shell pwd)/debian/tmp
 	dh $@
 
 override_dh_auto_install:
-	make install-vm-all
+	make install-vm-sec

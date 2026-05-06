@@ -48,5 +48,6 @@ _install-tests:
 	install -m 644 tests/*.cfg $(DESTDIR)/usr/share/ansible/tests/
 
 install-vm: _install-common _install-vm
-install-vm-all: install-vm _install-security _install-tests
+install-vm-sec: install-vm _install-security
+install-vm-all: install-vm-sec _install-tests
 install-dom0: _install-common _install-security _install-dom0 _install-tests
