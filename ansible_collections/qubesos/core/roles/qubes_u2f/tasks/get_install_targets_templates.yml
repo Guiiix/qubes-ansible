@@ -1,0 +1,24 @@
+---
+- block:
+  - name: Compute qube facts
+    qubesos.core.qube_facts:
+      name: "{{ inventory_hostname }}"
+
+  - name: Check if selected qubes class is supported
+    ansible.builtin.assert:
+      that:
+        qubes_facts.properties.klass in ["AppVM", "StandaloneVM", "TemplateVM"]
+      fail_msg: "Cannot install qubes_u2f: unsupported class {{ qubes_facts.properties.klass }}"
+
+  # add_host run only once
+  - ansible.builtin.add_host:
+      group: qubes_u2f_install_hosts_templates
+      name: "{{ target }}"
+    vars:
+      target: >-
+        {%- if hostvars[item].qubes_facts.properties.klass == "AppVM" -%}{{ hostvars[item].qubes_facts.properties.template }}
+        {%- else -%}{{ item }}
+        {%- endif -%}
+    loop: "{{ ansible_play_hosts }}"
+
+  delegate_to: localhost
