@@ -63,9 +63,8 @@ cat << EOF > /etc/qubes/policy.d/30-mgmtvm.policy
 admin.vm.Create.AppVM            * mgmtvm dom0                   allow
 admin.vm.Create.StandaloneVM     * mgmtvm dom0                   allow
 admin.vm.Create.TemplateVM       * mgmtvm dom0                   allow
-admin.vm.property.Get            * mgmtvm @tag:created-by-mgmtvm allow target=dom0
 
-# You may want to allow the ManagementVM to clone some templates
+# You may want to allow the ManagementVM to clone some templates to create StandaloneVMs or new TemplateVMs
 admin.vm.volume.CloneFrom        * mgmtvm debian-13-xfce         allow target=dom0
 admin.vm.volume.CloneFrom        * mgmtvm fedora-42-xfce         allow target=dom0
 
@@ -79,10 +78,6 @@ admin.vm.device.block.Available  * mgmtvm dom0 allow
 
 # You may want to assign devices to your qubes
 admin.vm.device.pci.Assign       * mgmtvm @tag:created-by-mgmtvm allow target=dom0
-
-# You may want to allow to clone some template to create StandaloneVMs or new TemplateVMs
-admin.vm.volume.CloneFrom        * mgmtvm debian-13-xfce         allow target=dom0
-admin.vm.volume.CloneFrom        * mgmtvm fedora-42-xfce         allow target=dom0
 
 # =============
 # Proxy Plugin
