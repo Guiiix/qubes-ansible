@@ -7,18 +7,37 @@
   - name: Check if selected qubes class is supported
     ansible.builtin.assert:
       that:
-        qubes_facts.properties.klass in ["AppVM", "StandaloneVM", "TemplateVM"]
+        qubes_facts.properties.klass in ["AppVM", "StandaloneVM", "TemplateVM", "DispVM"]
       fail_msg: "Cannot install qubes_u2f: unsupported class {{ qubes_facts.properties.klass }}"
+
+  - name: Save current qube facts
+    ansible.builtin.set_fact:
+      qubes_facts_backup: "{{ qubes_facts }}"
+    when: qubes_facts.properties.klass == "DispVM"
+
+  - name: Get the facts of the DispVM template
+    qubesos.core.qube_facts:
+      name: "{{ qubes_facts.properties.template }}"
+    when: qubes_facts.properties.klass == "DispVM"
+
+  - name: Restore qube facts
+    ansible.builtin.set_fact:
+      appvm_facts: "{{ qubes_facts }}"
+      qubes_facts: "{{ qubes_facts_backup }}"
+    when: qubes_facts_backup is defined
+
+  - name: Set template_vm fact
+    ansible.builtin.set_fact:
+      template_vm: >-
+        {%- if qubes_facts.properties.klass == "AppVM" -%}{{ qubes_facts.properties.template }}
+        {%- elif qubes_facts.properties.klass == "DispVM" -%}{{ appvm_facts.properties.template }}
+        {%- else -%}{{ inventory_hostname }}
+        {%- endif -%}
 
   # add_host run only once
   - ansible.builtin.add_host:
       group: qubes_u2f_install_hosts_templates
-      name: "{{ target }}"
-    vars:
-      target: >-
-        {%- if hostvars[item].qubes_facts.properties.klass == "AppVM" -%}{{ hostvars[item].qubes_facts.properties.template }}
-        {%- else -%}{{ item }}
-        {%- endif -%}
+      name: "{{ hostvars[item].template_vm }}"
     loop: "{{ ansible_play_hosts }}"
 
   delegate_to: localhost
