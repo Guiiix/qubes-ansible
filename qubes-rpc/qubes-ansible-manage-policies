@@ -21,21 +21,29 @@
 
 import fcntl
 import os
+import qubesadmin
+import re
 import sys
 
 
-DISPVM_NAME_MAXLEN = 31
 QUBES_ANSIBLE_POLICY_FILE = "/run/qubes/policy.d/30-qubes-ansible.policy"
 
 
-def main(argv):
-    if len(argv) != 1:
-        print("no argument expected", file=sys.stderr)
+def check_tag(dispvm):
+    app = qubesadmin.Qubes()
+    remote_domain = os.environ['QREXEC_REMOTE_DOMAIN']
+    if remote_domain == "dom0":
+        return
+    expected_tag = f"created-by-{remote_domain}"
+    if not expected_tag in app.domains[dispvm].tags:
+        print(
+            f"${remote_domain} is not allowed to grant permissions to {dispvm}",
+            file=sys.stderr
+        )
         exit(1)
 
-    target = os.environ["QREXEC_REQUESTED_TARGET"]
-    target_mgmt_dispvm = f"disp-mgmt-{target}"[:DISPVM_NAME_MAXLEN]
 
+def create_policies(target_mgmt_dispvm, target):
     with open(QUBES_ANSIBLE_POLICY_FILE, "a+") as pol_file:
         fcntl.lockf(pol_file.fileno(), fcntl.LOCK_EX)
         pol_file.write(
@@ -49,6 +57,46 @@ def main(argv):
         )
         pol_file.flush()
         os.fsync(pol_file.fileno())
+
+
+def remove_policies(target_mgmt_dispvm):
+    with open(QUBES_ANSIBLE_POLICY_FILE, "a+") as pol_file:
+        fcntl.lockf(pol_file.fileno(), fcntl.LOCK_EX)
+        pol_file.seek(0)
+        new_file_lines = [
+            line
+            for line in pol_file.readlines()
+            if not re.match(
+                rf"^\s*\S+\s+\S+\s+{re.escape(target_mgmt_dispvm)}\s+",
+                line,
+            )
+        ]
+        pol_file.seek(0)
+        pol_file.truncate()
+        pol_file.write("".join(new_file_lines))
+        pol_file.flush()
+        os.fsync(pol_file.fileno())
+
+
+def main(argv):
+    if len(argv) != 2:
+        print("1 argument is expected", file=sys.stderr)
+        exit(1)
+
+    target = os.environ["QREXEC_REQUESTED_TARGET"]
+    service = os.environ["QREXEC_SERVICE_FULL_NAME"]
+    target_mgmt_dispvm = sys.argv[1].strip()
+
+    check_tag(target_mgmt_dispvm)
+
+    if service.startswith("ansible.CreateManagementPolicies"):
+        create_policies(target_mgmt_dispvm, target)
+
+    elif service.startswith("ansible.RemoveManagementPolicies"):
+        remove_policies(target_mgmt_dispvm)
+
+    else:
+        exit(1)
 
 
 if __name__ == '__main__':

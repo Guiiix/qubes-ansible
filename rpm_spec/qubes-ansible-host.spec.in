@@ -61,6 +61,8 @@ make DESTDIR=$RPM_BUILD_ROOT install-dom0
 %{_sysconfdir}/qubes-rpc/ansible.CreateManagementPolicies
 %{_sysconfdir}/qubes-rpc/ansible.RemoveManagementPolicies
 %{_sysconfdir}/qubes-rpc/ansible.WaitForCleanup
+/usr/lib/qubes/qubes-rpc/qubes-ansible-manage-policies
+/usr/lib/qubes/qubes-rpc/ansible.WaitForCleanup
 
 /usr/lib/qubes/update-ansible-default-strategy
 

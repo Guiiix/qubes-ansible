@@ -19,9 +19,12 @@ _install-common:
 
 _install-dom0:
 	mkdir -p $(DESTDIR)/etc/qubes-rpc/
-	install -m 755 qubes-rpc/ansible.CreateManagementPolicies $(DESTDIR)/etc/qubes-rpc/ansible.CreateManagementPolicies
-	install -m 755 qubes-rpc/ansible.RemoveManagementPolicies $(DESTDIR)/etc/qubes-rpc/ansible.RemoveManagementPolicies
-	install -m 755 qubes-rpc/ansible.RemoveManagementPolicies $(DESTDIR)/etc/qubes-rpc/ansible.WaitForCleanup
+	mkdir -p $(DESTDIR)/usr/lib/qubes/qubes-rpc/
+	install -m 755 qubes-rpc/qubes-ansible-manage-policies $(DESTDIR)/usr/lib/qubes/qubes-rpc/qubes-ansible-manage-policies
+	install -m 755 qubes-rpc/ansible.WaitForCleanup $(DESTDIR)/usr/lib/qubes/qubes-rpc/ansible.WaitForCleanup
+	ln -s ../../usr/lib/qubes/qubes-rpc/qubes-ansible-manage-policies $(DESTDIR)/etc/qubes-rpc/ansible.CreateManagementPolicies
+	ln -s ../../usr/lib/qubes/qubes-rpc/qubes-ansible-manage-policies $(DESTDIR)/etc/qubes-rpc/ansible.RemoveManagementPolicies
+	ln -s ../../usr/lib/qubes/qubes-rpc/ansible.WaitForCleanup $(DESTDIR)/etc/qubes-rpc/ansible.WaitForCleanup
 
 _install-security:
 	mkdir -p $(DESTDIR)/usr/lib/qubes/

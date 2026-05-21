@@ -331,15 +331,23 @@ class QubesPlayExecutor:
             role_path = Path(role.get_role_path())
             shutil.copytree(role_path, dest_roles_path / role_path.name)
 
-    def _add_rpc_policies(self):
-        self._call_ansible_service_rpc("ansible.CreateManagementPolicies")
+    def _add_rpc_policies(self, dispvm_name):
+        self._call_ansible_service_rpc(
+            "ansible.CreateManagementPolicies", dispvm_name
+        )
 
-    def _call_ansible_service_rpc(self, service_name):
+    def _call_ansible_service_rpc(self, service_name, arg=None):
         env = os.environ.copy()
+        if arg:
+            service_name += f"+{arg}"
         # dom0
         if os.path.exists("/usr/bin/qrexec-client"):
             env["QREXEC_REQUESTED_TARGET"] = self.vm.name
+            env["QREXEC_REMOTE_DOMAIN"] = "dom0"
+            env["QREXEC_SERVICE_FULL_NAME"] = service_name
             command = [f"/etc/qubes-rpc/{service_name}"]
+            if arg:
+                command.append(arg)
         else:
             command = [
                 "/usr/bin/qrexec-client-vm",
@@ -391,8 +399,10 @@ class QubesPlayExecutor:
                 "".join(playbook_file.readlines()[int(start_line) - 1 :])
             )[0]
 
-    def _remove_rpc_policies(self):
-        self._call_ansible_service_rpc("ansible.RemoveManagementPolicies")
+    def _remove_rpc_policies(self, dispvm_name):
+        self._call_ansible_service_rpc(
+            "ansible.RemoveManagementPolicies", dispvm_name
+        )
 
     def _start_mgmt_disp_vm(self):
         self.vvv("Lookup for dispvm_mgmt")
@@ -426,7 +436,7 @@ class QubesPlayExecutor:
 
         dispvm = self._start_mgmt_disp_vm()
 
-        self._add_rpc_policies()
+        self._add_rpc_policies(dispvm.name)
         self.temp_dir.mkdir()
 
         try:
@@ -474,7 +484,7 @@ class QubesPlayExecutor:
             )
 
         finally:
-            self._remove_rpc_policies()
+            self._remove_rpc_policies(dispvm.name)
             shutil.rmtree(self.temp_dir)
             if not self._dispvm_initially_running:
                 self.vvv(f"Stopping {dispvm.name}")
