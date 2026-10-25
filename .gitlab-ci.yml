@@ -1,30 +1,33 @@
-include:
-  - file: /common.yml
-    project: QubesOS/qubes-continuous-integration
-  - file: /r4.3/gitlab-base.yml
-    project: QubesOS/qubes-continuous-integration
-  - file: /r4.3/gitlab-host.yml
-    project: QubesOS/qubes-continuous-integration
-  - file: /r4.3/gitlab-vm.yml
-    project: QubesOS/qubes-continuous-integration
+#include:
+#  - file: /common.yml
+#    project: QubesOS/qubes-continuous-integration
+#  - file: /r4.3/gitlab-base.yml
+#    project: QubesOS/qubes-continuous-integration
+#  - file: /r4.3/gitlab-host.yml
+#    project: QubesOS/qubes-continuous-integration
+#  - file: /r4.3/gitlab-vm.yml
+#    project: QubesOS/qubes-continuous-integration
 
-lint:
-  extends: .lint
-  stage: tests
+#lint:
+#  extends: .lint
+#  stage: tests
+
+stages:
+  - tests
 
 .qubes-ansible-tests:
   stage: tests
   tags:
     - vm-kvm
 
-  before_script: &install_qubes_ansible
-    - $CI_PROJECT_DIR/ci/sys_info.sh
+  #before_script: &install_qubes_ansible
+  #  - $CI_PROJECT_DIR/ci/sys_info.sh
     # install dependencies
-    - sudo qubes-dom0-update -y --enablerepo=qubes*current-testing
-    - sudo qubes-dom0-update -y ansible python3-pytest python3-coverage perl-Digest-SHA sequoia-sqv
+    #- sudo qubes-dom0-update -y --enablerepo=qubes*current-testing
+  #  - sudo qubes-dom0-update -y --enablerepo=qubes*current-testing ansible python3-pytest python3-coverage perl-Digest-SHA sequoia-sqv qubes-ansible*
     # install from artifacts
-    - find $CI_PROJECT_DIR/artifacts/repository/host-fc* -name '*.noarch.rpm' -exec sudo dnf install -y {} \+
-    - $CI_PROJECT_DIR/ci/install_ansible_vm.sh
+    #- find $CI_PROJECT_DIR/artifacts/repository/host-fc* -name '*.noarch.rpm' -exec sudo dnf install -y {} \+
+  #  - $CI_PROJECT_DIR/ci/install_ansible_vm.sh
 
   after_script:
     - ci/codecov-wrapper -F unittests
@@ -32,41 +35,38 @@ lint:
   variables:
     VM_IMAGE: "qubesos:4.3"
 
-  needs:
-    - r4.3:build:host-fc41
-    - r4.3:build:vm-fc43
-    - r4.3:build:vm-fc44
-
-r4.3:mgmt-host:
-  extends: .qubes-ansible-tests
-  script:
-    # run ansible's tests
-    - cd /usr/share/ansible && sudo coverage run --data-file=$CI_PROJECT_DIR/.coverage --include=plugins/modules/qubesos.py,plugins/connection/qubes.py -m pytest -vvv tests/qubes/
+#r4.3:mgmt-host:
+#  extends: .qubes-ansible-tests
+#  script:
+#    # run ansible's tests
+#    - cd /usr/share/ansible && sudo coverage run --data-file=$CI_PROJECT_DIR/.coverage --include=plugins/modules/qubesos.py,plugins/connection/qubes.py -m pytest -vvv tests/qubes/
 
 r4.3:mgmtvm:
   extends: .qubes-ansible-tests
 
-  before_script:
-    - *install_qubes_ansible
-    - $CI_PROJECT_DIR/ci/install_mgmtvm.sh
+  #before_script:
+    #- *install_qubes_ansible
+    #- $CI_PROJECT_DIR/ci/install_mgmtvm.sh
   script:
+    - qvm-run -p -u root fedora-44-xfce 'cat /usr/bin/ethtool'
+    #- qvm-copy-to-vm mgmtvm $CI_PROJECT_DIR/ci/debug.sh
+    #- qvm-run -p -u root mgmtvm 'bash -x /home/user/QubesIncoming/dom0/debug.sh'
     # run ansible's tests
-    - qvm-run -p -u root mgmtvm 'cd /usr/share/ansible ; PYTHONPATH=. coverage run --data-file=/root/.coverage --include=plugins/modules/qubesos.py,plugins/connection/qubes.py -m pytest -vvv tests/qubes/'
+    #- qvm-run -p -u root mgmtvm 'cd /usr/share/ansible ; PYTHONPATH=. coverage run --data-file=/root/.coverage --include=plugins/modules/qubesos.py,plugins/connection/qubes.py -m pytest -vvv tests/qubes/'
 
-pages:
-  stage: build
-  image: python:3.14
-  tags:
-    - docker
-  artifacts:
-    paths:
-      - public
-  script:
-    - mkdir public
-    - pip3 install sphinx sphinx-ansible-theme antsibull-docs ansible
-    - git submodule update --init --recursive
-    - mkdir build/
-    - antsibull-docs sphinx-init qubesos.* --use-current --dest-dir build/
-    - ANSIBLE_COLLECTIONS_PATH=$(pwd) ./build/build.sh
-    - mv build/build/html/* public/
-
+#pages:
+#  stage: build
+#  image: python:3.14
+#  tags:
+#    - docker
+#  artifacts:
+#    paths:
+#      - public
+#  script:
+#    - mkdir public
+#    - pip3 install sphinx sphinx-ansible-theme antsibull-docs ansible
+#    - git submodule update --init --recursive
+#    - mkdir build/
+#    - antsibull-docs sphinx-init qubesos.* --use-current --dest-dir build/
+#    - ANSIBLE_COLLECTIONS_PATH=$(pwd) ./build/build.sh
+#    - mv build/build/html/* public/

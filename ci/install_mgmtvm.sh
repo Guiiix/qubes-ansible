@@ -12,23 +12,26 @@ default_mgmt_dispvm_template="$(qvm-prefs "$default_mgmt_dispvm" template)"
 [[ "$default_mgmt_dispvm_template" == fedora-* ]] || err_ex "unsupported template $default_mgmt_dispvm_template"
 fedora_ver="$(echo "$default_mgmt_dispvm_template" | cut -d- -f2)"
 
-repo_dir="artifacts/repository/vm-fc${fedora_ver}"
-[[ -d "$repo_dir" ]] || err_ex "'$repo_dir' not found"
+#repo_dir="artifacts/repository/vm-fc${fedora_ver}"
+#[[ -d "$repo_dir" ]] || err_ex "'$repo_dir' not found"
 
 qvm-create --class AppVM --property maxmem=800 --label black --template "$default_mgmt_dispvm_template" mgmtvm
 
-find $repo_dir -name 'qubes-ansible-*.noarch.rpm' \
-    -not -name  'qubes-ansible-vm*.noarch.rpm' \
-    -exec qvm-copy-to-vm mgmtvm "{}" \;
+#find $repo_dir -name 'qubes-ansible-*.noarch.rpm' \
+#    -not -name  'qubes-ansible-vm*.noarch.rpm' \
+#    -exec qvm-copy-to-vm mgmtvm "{}" \;
 
 
-fedora_ver="$(echo "$default_mgmt_dispvm_template" | cut -d- -f2)"
+#fedora_ver="$(echo "$default_mgmt_dispvm_template" | cut -d- -f2)"
 
-repo_dir="artifacts/repository/vm-fc${fedora_ver}"
-[[ -d "$repo_dir" ]] || err_ex "'$repo_dir' not found"
+#repo_dir="artifacts/repository/vm-fc${fedora_ver}"
+#[[ -d "$repo_dir" ]] || err_ex "'$repo_dir' not found"
+qvm-run --pass-io mgmtvm "ls -lah /usr/bin/ethtool"
+#qvm-run -p -u root --no-gui mgmtvm "dnf update -y --enablerepo=qubes*current-testing"
+#qvm-run -p -u root --no-gui  mgmtvm "dnf install -y --enablerepo=qubes*current-testing python3-coverage /home/user/QubesIncoming/dom0/*.rpm"
+qvm-run -p -u root --no-gui  mgmtvm "dnf install -y --enablerepo=qubes*current-testing python3-coverage qubes-ansible*"
+qvm-run --pass-io mgmtvm "ls -lah /usr/bin/ethtool"
 
-qvm-run -p -u root --no-gui mgmtvm "dnf update -y --enablerepo=qubes*current-testing"
-qvm-run -p -u root --no-gui  mgmtvm "dnf install -y --enablerepo=qubes*current-testing python3-coverage /home/user/QubesIncoming/dom0/*.rpm"
 
 cat << EOF >> /etc/qubes/policy.d/include/admin-local-rwx
 mgmtvm @tag:created-by-mgmtvm allow target=dom0
